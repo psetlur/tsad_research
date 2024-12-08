@@ -1,0 +1,10 @@
+data_params:
+  data_paths:
+    normal_data_path: 'normal.parquet'
+    anom_data_path: 'generated_tsa.parquet'
+    meta_data_path: 'meta_data.parquet'
+model_params:
+  batch_size: 128
+  lr: 0.001
+  ts_input_size: 512
+  epochs: 5
