@@ -162,7 +162,7 @@ def black_box_function(model, train_dataloader, val_dataloader, test_dataloader,
         total_loss = np.mean(total_loss)
         fscore = np.mean(fscore)
 
-        visualize_embedding(z_train, z_aug, z_test, y_test, t_test)
+        visualize_embedding(z_train, z_aug, z_test, y_test)
 
     return total_loss, fscore
 
