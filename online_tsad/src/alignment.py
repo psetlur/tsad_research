@@ -90,12 +90,9 @@ def black_box_function(model, train_dataloader, val_dataloader, test_dataloader,
     n_trials = 1
     ratio_0, ratio_1 = a_config['ratio_0'], a_config['ratio_1']
 
-    level_0_cdf  = [0, a_config['level_0_h0'] , a_config['level_0_h0']  + a_config['level_0_h1'] , 1]
-    length_0_cdf = [0, a_config['length_0_h0'], a_config['length_0_h0'] + a_config['length_0_h1'], 1]
-    level_1_cdf  = [0, a_config['level_1_h0'] , a_config['level_1_h0']  + a_config['level_1_h1'] , 1]
-    length_1_cdf = [0, a_config['length_1_h0'], a_config['length_1_h0'] + a_config['length_1_h1'], 1]
-    bins_level = [-1, -0.33, 0.33, 1]
-    bins_length = [0.2, 0.3, 0.4, 0.5]
+    fixed_level = 0.5
+    fixed_length = 0.3
+    fixed_start = 0.2
 
     with torch.no_grad():
         z_train, x_train_np = [], []
@@ -137,15 +134,11 @@ def black_box_function(model, train_dataloader, val_dataloader, test_dataloader,
             x_aug, labels = [], []
             for i in test_index_0:
                 x = x_train_np[i]
-                xa, l = inject_platform(x, hist_sample(level_0_cdf, bins_level), np.random.uniform(0, 0.5), hist_sample(length_0_cdf, bins_length))
+                #xa, l = inject_platform(x, hist_sample(level_0_cdf, bins_level), np.random.uniform(0, 0.5), hist_sample(length_0_cdf, bins_length))
+                xa, l = inject_platform(x, fixed_level, fixed_start, fixed_length)
                 x_aug.append(xa)
                 labels.append(l)
-            for i in test_index_1:
-                x = x_train_np[i]
-                xa, l = inject_mean(x, hist_sample(level_1_cdf, bins_level), np.random.uniform(0, 0.5), hist_sample(length_1_cdf, bins_length))
-                x_aug.append(xa)
-                labels.append(l)
-
+   
             z_aug = model(torch.tensor(np.array(x_aug)).float().unsqueeze(1).to(0)).detach().cpu()
             z_train_t, z_aug_t, z_valid_t = emb(z_train[train_index].clone().squeeze(), z_aug.clone().squeeze(), z_valid.clone().squeeze())
 
@@ -165,6 +158,86 @@ def black_box_function(model, train_dataloader, val_dataloader, test_dataloader,
         visualize_embedding(z_train, z_aug, z_test, y_test)
 
     return total_loss, fscore
+
+# def black_box_function(model, train_dataloader, val_dataloader, test_dataloader, a_config):
+#     n_trials = 1
+#     ratio_0, ratio_1 = a_config['ratio_0'], a_config['ratio_1']
+
+#     level_0_cdf  = [0, a_config['level_0_h0'] , a_config['level_0_h0']  + a_config['level_0_h1'] , 1]
+#     length_0_cdf = [0, a_config['length_0_h0'], a_config['length_0_h0'] + a_config['length_0_h1'], 1]
+#     level_1_cdf  = [0, a_config['level_1_h0'] , a_config['level_1_h0']  + a_config['level_1_h1'] , 1]
+#     length_1_cdf = [0, a_config['length_1_h0'], a_config['length_1_h0'] + a_config['length_1_h1'], 1]
+#     bins_level = [-1, -0.33, 0.33, 1]
+#     bins_length = [0.2, 0.3, 0.4, 0.5]
+
+#     with torch.no_grad():
+#         z_train, x_train_np = [], []
+#         for x_batch in train_dataloader:
+#             c_x = model(x_batch.to(0)).detach().cpu()
+#             z_train.append(c_x)
+#             x_train_np.append(x_batch.numpy())
+#         z_train = torch.cat(z_train, dim=0)
+#         x_train_np = np.concatenate(x_train_np, axis=0).reshape(len(z_train), -1)
+
+#         z_valid = []
+#         for x_batch in val_dataloader:
+#             c_x = model(x_batch.to(0)).detach().cpu()
+#             z_valid.append(c_x)
+#         z_valid = torch.cat(z_valid, dim=0)
+
+#         z_test, y_test, t_test = [], [], []
+#         for x_batch, y_batch in test_dataloader:
+#             c_x = model(x_batch.to(0)).detach().cpu()
+#             z_test.append(c_x)
+#             y_batch_t = np.zeros((x_batch.shape[0], x_batch.shape[2]))
+#             for i, m in enumerate(y_batch.squeeze()):
+#                 m_start, m_length, _, m_type = m[-4:]
+#                 if m_type != -1:
+#                     y_batch_t[i, int(m_start):int(m_start)+int(m_length)] = 1
+#             y_test.append(y_batch_t)
+#             t_test.append(y_batch[:, 0, -1])
+#         z_test = torch.cat(z_test, dim=0)
+#         y_test = np.concatenate(y_test, axis=0)
+#         t_test = np.concatenate(t_test, axis=0)
+
+#         emb = EmbNormalizer()
+#         total_loss = []
+#         fscore = []
+#         for seed in range(n_trials):
+#             train_index, test_index = train_test_split(range(len(x_train_np)), train_size=1-ratio_0-ratio_1, random_state=seed)
+#             test_index_0, test_index_1 = train_test_split(test_index, train_size=ratio_0/(ratio_0+ratio_1), random_state=seed)
+
+#             x_aug, labels = [], []
+#             for i in test_index_0:
+#                 x = x_train_np[i]
+#                 xa, l = inject_platform(x, hist_sample(level_0_cdf, bins_level), np.random.uniform(0, 0.5), hist_sample(length_0_cdf, bins_length))
+#                 x_aug.append(xa)
+#                 labels.append(l)
+#             for i in test_index_1:
+#                 x = x_train_np[i]
+#                 xa, l = inject_mean(x, hist_sample(level_1_cdf, bins_level), np.random.uniform(0, 0.5), hist_sample(length_1_cdf, bins_length))
+#                 x_aug.append(xa)
+#                 labels.append(l)
+
+#             z_aug = model(torch.tensor(np.array(x_aug)).float().unsqueeze(1).to(0)).detach().cpu()
+#             z_train_t, z_aug_t, z_valid_t = emb(z_train[train_index].clone().squeeze(), z_aug.clone().squeeze(), z_valid.clone().squeeze())
+
+#             W_loss = geomloss.SamplesLoss("sinkhorn", p=2, blur=0.05, scaling=0.9)
+#             loss = -W_loss(torch.cat([z_train_t, z_aug_t], dim=0), z_valid_t).item()
+#             total_loss.append(loss)
+
+#             z_test_t = emb.normalize(z_test)
+#             X = np.concatenate([z_train_t.numpy(), z_aug_t.numpy()], axis=0)
+#             y = np.concatenate([np.zeros((len(train_index), x_train_np.shape[1])), labels], axis=0)
+#             y_pred = classify(torch.tensor(X).float().to('cuda:0'), torch.tensor(y).float().to('cuda:0'), z_test_t.to('cuda:0'))
+#             fscore.append(f1_score(y_test.reshape(-1), y_pred.reshape(-1)))
+
+#         total_loss = np.mean(total_loss)
+#         fscore = np.mean(fscore)
+
+#         visualize_embedding(z_train, z_aug, z_test, y_test)
+
+#     return total_loss, fscore
 
 
 def visualize_embedding(z_train, z_aug, z_test, y_test):
