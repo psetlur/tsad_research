@@ -101,7 +101,7 @@ if __name__ == "__main__":
 
     best_target = -np.inf
     number_of_random_search = 10
-    for iter in range(200):
+    for iter in range(20):
         print("Iteration", iter)
 
         if iter < number_of_random_search:
