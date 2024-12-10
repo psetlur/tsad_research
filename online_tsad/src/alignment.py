@@ -90,9 +90,13 @@ def black_box_function(model, train_dataloader, val_dataloader, test_dataloader,
     n_trials = 1
     ratio_0, ratio_1 = a_config['ratio_0'], a_config['ratio_1']
 
-    fixed_level = 0.5
-    fixed_length = 0.3
-    fixed_start = 0.2
+    fixed_level_0 = 0.5
+    fixed_length_0 = 0.3
+    fixed_start_0 = 0.2
+
+    fixed_level_1 = 0.7
+    fixed_length_1 = 0.4
+    fixed_start_1 = 0.7
 
     with torch.no_grad():
         z_train, x_train_np = [], []
@@ -134,8 +138,10 @@ def black_box_function(model, train_dataloader, val_dataloader, test_dataloader,
             x_aug, labels = [], []
             for i in test_index_0:
                 x = x_train_np[i]
-                #xa, l = inject_platform(x, hist_sample(level_0_cdf, bins_level), np.random.uniform(0, 0.5), hist_sample(length_0_cdf, bins_length))
-                xa, l = inject_platform(x, fixed_level, fixed_start, fixed_length)
+                if np.random.random() > 0.5:
+                    xa, l = inject_platform(x, fixed_level_0, fixed_start_0, fixed_length_0)
+                else:
+                    xa, l = inject_platform(x, fixed_level_1, fixed_start_1, fixed_length_1)
                 x_aug.append(xa)
                 labels.append(l)
    
