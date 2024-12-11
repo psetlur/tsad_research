@@ -119,11 +119,12 @@ if __name__ == "__main__":
         print("Next point to probe is:", next_point_to_probe)
 
         a_config = {
-            "ratio_anomaly": next_point_to_probe.get("ratio_anomaly", 0.1),
-            "fixed_level": next_point_to_probe.get("fixed_level", 0.5),
-            "fixed_length": next_point_to_probe.get("fixed_length", 0.3),
-            "fixed_start": next_point_to_probe.get("fixed_start", 0.2)
+            "ratio_anomaly": best_point["ratio_anomaly"],
+            "fixed_level": best_point["fixed_level"],
+            "fixed_length": best_point["fixed_length"],
+            "fixed_start": best_point["fixed_start"]
         }
+
 
         if a_config["fixed_length"] > 1 or a_config["ratio_anomaly"] > 1:
             target, f1score = -10, 0
