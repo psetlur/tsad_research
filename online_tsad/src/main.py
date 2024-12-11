@@ -75,13 +75,21 @@ if __name__ == "__main__":
         "length_1_h0": (0.001, 1), "length_1_h1": (0.001, 1),
         "level_1_h0" : (0.001, 1), "level_1_h1" : (0.001, 1),
     }
+    # best_point = {
+    #     "ratio_0"  : 0.05, "ratio_1"  : 0.05,
+    #     "length_0_h0": 0.1, "length_0_h1": 0.6,
+    #     "level_0_h0" : 0.2, "level_0_h1" : 0.7,
+    #     "length_1_h0": 0.2, "length_1_h1": 0.2,
+    #     "level_1_h0" : 0.7, "level_1_h1" : 0.2,
+    # } 
     best_point = {
-        "ratio_0"  : 0.05, "ratio_1"  : 0.05,
-        "length_0_h0": 0.1, "length_0_h1": 0.6,
-        "level_0_h0" : 0.2, "level_0_h1" : 0.7,
-        "length_1_h0": 0.2, "length_1_h1": 0.2,
-        "level_1_h0" : 0.7, "level_1_h1" : 0.2,
-    } 
+        "ratio_anomaly": 0.1,  # Total ratio of anomalies (e.g., 10% of the data)
+        "fixed_level": 0.5,    # Fixed level for the platform anomaly
+        "fixed_length": 0.3,   # Fixed length for the platform anomaly
+        "fixed_start": 0.2     # Fixed start position for the platform anomaly
+    }
+
+
 
     model = train_model(args, m_config, train_dataloader, trainval_dataloader, best_point)
     target, f1score = black_box_function(model, train_dataloader, val_dataloader, test_dataloader, best_point)
