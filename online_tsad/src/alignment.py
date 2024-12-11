@@ -88,7 +88,11 @@ def hist_sample(cdf, bins):
 
 def black_box_function(model, train_dataloader, val_dataloader, test_dataloader, a_config):
     n_trials = 1
-    ratio_0, ratio_1 = a_config['ratio_0'], a_config['ratio_1']
+    #ratio_0, ratio_1 = a_config['ratio_0'], a_config['ratio_1']
+    ratio_anomaly = a_config['ratio_anomaly']
+    fixed_level = a_config['fixed_level']
+    fixed_length = a_config['fixed_length']
+    fixed_start = a_config['fixed_start']
 
     fixed_level_0 = 0.5
     fixed_length_0 = 0.3
@@ -132,16 +136,17 @@ def black_box_function(model, train_dataloader, val_dataloader, test_dataloader,
         total_loss = []
         fscore = []
         for seed in range(n_trials):
-            train_index, test_index = train_test_split(range(len(x_train_np)), train_size=1-ratio_0-ratio_1, random_state=seed)
-            test_index_0, test_index_1 = train_test_split(test_index, train_size=ratio_0/(ratio_0+ratio_1), random_state=seed)
+            train_index, test_index = train_test_split(range(len(x_train_np)), train_size=1-ratio_anomaly, random_state=seed)
+            #test_index_0, test_index_1 = train_test_split(test_index, train_size=ratio_0/(ratio_0+ratio_1), random_state=seed)
 
             x_aug, labels = [], []
-            for i in test_index_0:
+            for i in test_index:
                 x = x_train_np[i]
-                if np.random.random() > 0.5:
-                    xa, l = inject_platform(x, fixed_level_0, fixed_start_0, fixed_length_0)
-                else:
-                    xa, l = inject_platform(x, fixed_level_1, fixed_start_1, fixed_length_1)
+                # if np.random.random() > 0.5:
+                #     xa, l = inject_platform(x, fixed_level_0, fixed_start_0, fixed_length_0)
+                # else:
+                #     xa, l = inject_platform(x, fixed_level_1, fixed_start_1, fixed_length_1)
+                xa, l = inject_platform(x, fixed_level, fixed_start, fixed_length) 
                 x_aug.append(xa)
                 labels.append(l)
    
