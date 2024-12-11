@@ -12,10 +12,10 @@ class CNNEncoder(nn.Module):
         
         self.encoder = nn.Sequential(
             nn.Conv1d(in_channels=1, out_channels=16, kernel_size=5, stride=2, bias=False),
-            # nn.BatchNorm1d(num_features=16),
+            nn.BatchNorm1d(num_features=16),
             nn.ReLU(),
-            nn.Conv1d(in_channels=16, out_channels=8, kernel_size=5, stride=1, bias=False),
-            # nn.BatchNorm1d(num_features=8),
+            nn.Conv1d(in_channels=16, out_channels=8, kernel_size=5, stride=1, dilation=2, bias=False),
+            nn.BatchNorm1d(num_features=8),
         )
         
         with torch.no_grad():
@@ -29,6 +29,7 @@ class CNNEncoder(nn.Module):
         self.contrastive_enc = nn.Sequential(
             nn.Linear(self.encoder_output_size * self.encoder_hidden_size, 128),
             nn.ReLU(),
+            nn.Dropout(p = 0.2),
             nn.Linear(128, 128),
         )
 
@@ -42,7 +43,7 @@ class CNNEncoder(nn.Module):
         
     def forward(self, x):
         x = self.encoder(x)
-        attn = F.sigmoid(self.attention(x))
+        attn = F.softmax(self.attention(x))
         x = torch.mul(attn.expand_as(x), x)
         x = self.contrastive_enc(x.reshape(x.shape[0], -1))
         return x
