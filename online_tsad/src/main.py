@@ -118,15 +118,28 @@ if __name__ == "__main__":
             next_point_to_probe = {k: np.round(v, 3) for k, v in optimizer.suggest().items()}
         print("Next point to probe is:", next_point_to_probe)
 
-        ### Assign a large negative score to illegal hyperparameters, i.e., with probability sum larger than 1
-        if next_point_to_probe['length_0_h0'] + next_point_to_probe['length_0_h1'] > 0.999 or \
-            next_point_to_probe['length_1_h0'] + next_point_to_probe['length_1_h1'] > 0.999 or \
-            next_point_to_probe['level_0_h0'] + next_point_to_probe['level_0_h1'] > 0.999 or \
-            next_point_to_probe['level_1_h0'] + next_point_to_probe['level_1_h1'] > 0.999:
+        a_config = {
+            "ratio_anomaly": next_point_to_probe.get("ratio_anomaly", 0.1),
+            "fixed_level": next_point_to_probe.get("fixed_level", 0.5),
+            "fixed_length": next_point_to_probe.get("fixed_length", 0.3),
+            "fixed_start": next_point_to_probe.get("fixed_start", 0.2)
+        }
+
+        if a_config["fixed_length"] > 1 or a_config["ratio_anomaly"] > 1:
             target, f1score = -10, 0
         else:
-            model = train_model(args, m_config, train_dataloader, trainval_dataloader, next_point_to_probe)
-            target, f1score = black_box_function(model, train_dataloader, val_dataloader, test_dataloader, next_point_to_probe)
+            model = train_model(args, m_config, train_dataloader, trainval_dataloader, a_config)
+            target, f1score = black_box_function(model, train_dataloader, val_dataloader, test_dataloader, a_config)
+
+        ### Assign a large negative score to illegal hyperparameters, i.e., with probability sum larger than 1
+        # if next_point_to_probe['length_0_h0'] + next_point_to_probe['length_0_h1'] > 0.999 or \
+        #     next_point_to_probe['length_1_h0'] + next_point_to_probe['length_1_h1'] > 0.999 or \
+        #     next_point_to_probe['level_0_h0'] + next_point_to_probe['level_0_h1'] > 0.999 or \
+        #     next_point_to_probe['level_1_h0'] + next_point_to_probe['level_1_h1'] > 0.999:
+        #     target, f1score = -10, 0
+        # else:
+        #     model = train_model(args, m_config, train_dataloader, trainval_dataloader, next_point_to_probe)
+        #     target, f1score = black_box_function(model, train_dataloader, val_dataloader, test_dataloader, next_point_to_probe)
         print("Found the target value to be:", target)
         print("Test F1-Score:", f1score)
 
