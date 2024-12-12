@@ -11,10 +11,10 @@ class CNNEncoder(nn.Module):
         self.ts_input_size = ts_input_size
         
         self.encoder = nn.Sequential(
-            nn.Conv1d(in_channels=1, out_channels=16, kernel_size=5, stride=2, bias=False),
+            nn.Conv1d(in_channels=1, out_channels=8, kernel_size=5, stride=2, bias=False),
             #nn.BatchNorm1d(num_features=16),
             nn.ReLU(),
-            nn.Conv1d(in_channels=16, out_channels=8, kernel_size=5, stride=1, dilation=2, bias=False),
+            nn.Conv1d(in_channels=8, out_channels=4, kernel_size=5, stride=1, dilation=2, bias=False),
             #nn.BatchNorm1d(num_features=8),
         )
         
@@ -29,7 +29,7 @@ class CNNEncoder(nn.Module):
         self.contrastive_enc = nn.Sequential(
             nn.Linear(self.encoder_output_size * self.encoder_hidden_size, 128),
             nn.ReLU(),
-            nn.Dropout(p = 0.1),
+            #nn.Dropout(p = 0.1),
             nn.Linear(128, 128),
         )
 
