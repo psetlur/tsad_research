@@ -24,17 +24,17 @@ class CNNEncoder(nn.Module):
         self.ts_input_size = ts_input_size
         
         self.encoder = nn.Sequential(
-            nn.Conv1d(in_channels=1, out_channels=16, kernel_size=3, stride=2, bias=False),
+            nn.Conv1d(in_channels=512, out_channels=16, kernel_size=3, stride=2, bias=False),
             #nn.BatchNorm1d(num_features=16),
             nn.ReLU(),
             nn.Conv1d(in_channels=16, out_channels=8, kernel_size=5, stride=1, dilation=2, bias=False),
             #nn.BatchNorm1d(num_features=8),
         )
 
-        self.positional_encoding = PositionalEncoding(ts_input_size, encoding_dim=1)
+        self.positional_encoding = PositionalEncoding(ts_input_size, encoding_dim=512)
         
         with torch.no_grad():
-            dummy_input = torch.zeros(1, 1, self.ts_input_size)
+            dummy_input = torch.zeros(1, 512, self.ts_input_size)
             dummy_output = self.encoder(dummy_input)
             self.encoder_output_size = dummy_output.size(2)
             self.encoder_hidden_size = dummy_output.size(1)
@@ -60,7 +60,7 @@ class CNNEncoder(nn.Module):
         
     def forward(self, x):
         if x.dim() == 2:
-            x = x.unsqueeze(1)
+            x = x.unsqueeze(1).permute(0, 2, 1)
         x = self.positional_encoding(x)
         x = self.encoder(x)
         attn = F.softmax(self.attention(x), dim = 2)
