@@ -59,6 +59,8 @@ class CNNEncoder(nn.Module):
                 m = spectral_norm(m)
         
     def forward(self, x):
+        if x.dim() == 2:
+            x = x.unsqueeze(1)
         x = self.positional_encoding(x)
         x = self.encoder(x)
         attn = F.softmax(self.attention(x), dim = 2)
