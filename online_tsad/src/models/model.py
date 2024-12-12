@@ -3,7 +3,7 @@ from torch import nn
 import torch.nn.functional as F
 from torch.nn.utils import spectral_norm
 
-
+# this is slow - try removing batch norm and dropout and see
 class CNNEncoder(nn.Module):
     def __init__(self, ts_input_size):
         super().__init__()
@@ -12,10 +12,10 @@ class CNNEncoder(nn.Module):
         
         self.encoder = nn.Sequential(
             nn.Conv1d(in_channels=1, out_channels=16, kernel_size=5, stride=2, bias=False),
-            nn.BatchNorm1d(num_features=16),
+            #nn.BatchNorm1d(num_features=16),
             nn.ReLU(),
             nn.Conv1d(in_channels=16, out_channels=8, kernel_size=5, stride=1, dilation=2, bias=False),
-            nn.BatchNorm1d(num_features=8),
+            #nn.BatchNorm1d(num_features=8),
         )
         
         with torch.no_grad():
@@ -43,7 +43,7 @@ class CNNEncoder(nn.Module):
         
     def forward(self, x):
         x = self.encoder(x)
-        attn = F.softmax(self.attention(x))
+        attn = F.softmax(self.attention(x), dim = 2)
         x = torch.mul(attn.expand_as(x), x)
         x = self.contrastive_enc(x.reshape(x.shape[0], -1))
         return x
