@@ -61,10 +61,10 @@ class CNNEncoder(nn.Module):
     def forward(self, x):
         x = self.positional_encoding(x)
         x = self.encoder(x)
-        #attn = F.softmax(self.attention(x), dim = 2)
-        #x = torch.mul(attn.expand_as(x), x)
-        x = x.permute(0, 2, 1)
-        x, _ = self.multihead_attention(x, x, x)
-        x = x.permute(0, 2, 1)
+        attn = F.softmax(self.attention(x), dim = 2)
+        x = torch.mul(attn.expand_as(x), x)
+        # x = x.permute(0, 2, 1)
+        # x, _ = self.multihead_attention(x, x, x)
+        # x = x.permute(0, 2, 1)
         x = self.contrastive_enc(x.reshape(x.shape[0], -1))
         return x
