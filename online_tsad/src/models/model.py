@@ -46,7 +46,7 @@ class CNNEncoder(nn.Module):
         self.contrastive_enc = nn.Sequential(
             nn.Linear(self.encoder_output_size * self.encoder_hidden_size, 128),
             nn.ReLU(),
-            #nn.Dropout(p = 0.1),
+            nn.Dropout(p = 0.1),
             nn.Linear(128, 128),
         )
 
