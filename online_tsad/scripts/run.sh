@@ -5,7 +5,7 @@ set -e
 ### Anomaly Types: platform, trend, extremum, mean, amplitude, frequency, shift
 ### Only platform and mean support histogram distribution now
 anomaly_type_1="platform"
-#anomaly_type_2="mean"
+anomaly_type_2="mean"
 anomaly_num="1"
 gpu=0
 time_id=`date +"%Y%m%d_%H%M%S"`
@@ -55,3 +55,4 @@ CUDA_VISIBLE_DEVICES=$gpu python src/main.py \
     --ckpt_monitor "$monitor" \
     --config_path "$config_path" \
     # --wandb
+
