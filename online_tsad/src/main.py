@@ -90,13 +90,14 @@ if __name__ == "__main__":
     }
 
 
-
-    model = train_model(args, m_config, train_dataloader, trainval_dataloader, best_point)
-    target, f1score = black_box_function(model, train_dataloader, val_dataloader, test_dataloader, best_point)
-    print(colored("Ground truth point:", 'blue'), best_point)
-    print(colored("Best target value :", 'blue'), target)
-    print(colored("Best F1-Score     :", 'blue'), f1score)
-    print()
+    num_iterations = 5
+    for iteration in range(num_iterations):
+        model = train_model(args, m_config, train_dataloader, trainval_dataloader, best_point)
+        target, f1score = black_box_function(model, train_dataloader, val_dataloader, test_dataloader, best_point)
+        print(colored("Ground truth point:", 'blue'), best_point)
+        print(colored(f"Iteration {iteration + 1} - Target Value:", 'blue'), target)
+        print(colored(f"Iteration {iteration + 1} - F1-Score   :", 'blue'), f1score)
+        print()
 
     # acquisition_function = UpperConfidenceBound(kappa=0.1)
     # optimizer = BayesianOptimization(

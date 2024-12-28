@@ -124,40 +124,7 @@ class Encoder(pl.LightningModule):
             y_0_neg[i][0] = self.inject_platform(y_0_neg[i][0], s0_0_neg, s1_0_neg, s2_0_neg)
             meta_0_neg.append([s0_0_neg, s1_0_neg, s2_0_neg])
 
-            # # Second platform anomaly
-            # m1 = [fixed_level_1, fixed_start_1, fixed_length_1]
-            # y_1[i][0] = self.inject_platform(y_1[i][0], *m1)
-            # meta_1.append(m1)
-
-            # # Positive and negative samples for second anomaly
-            # s0_1 = m1[0] + np.random.uniform(low=-TAU, high=TAU)
-            # s1_1 = max(m1[1] + np.random.uniform(low=-TAU, high=TAU), 0)
-            # s2_1 = max(m1[2] + np.random.uniform(low=-TAU, high=TAU), 0)
-            # y_1_pos[i][0] = self.inject_platform(y_1_pos[i][0], s0_1, s1_1, s2_1)
-
-            # s0_1_neg = m1[0] + np.random.uniform(low=NEG_RANGE, high=-TAU) if np.random.random() > 0.5 else m1[0] + np.random.uniform(low=TAU, high=POS_RANGE)
-            # s1_1_neg = max(m1[1] + np.random.uniform(low=NEG_RANGE, high=-TAU) if np.random.random() > 0.5 else m1[1] + np.random.uniform(low=TAU, high=POS_RANGE), 0)
-            # s2_1_neg = max(m1[2] + np.random.uniform(low=NEG_RANGE, high=-TAU) if np.random.random() > 0.5 else m1[2] + np.random.uniform(low=TAU, high=POS_RANGE), 0)
-            # y_1_neg[i][0] = self.inject_platform(y_1_neg[i][0], s0_1_neg, s1_1_neg, s2_1_neg)
-            # meta_1_neg.append([s0_1_neg, s1_1_neg, s2_1_neg])
-                
-            # ### Mean shift anomaly
-            # m = [hist_sample(level_1_cdf, LEVEL_BINS), np.random.uniform(0, 0.5), hist_sample(length_1_cdf, LENGTH_BINS)]
-            # m[0] = min(m[0], -0.1) if m[0] < 0 else max(m[0], 0.1)
-            # y_1[i][0] = self.inject_mean(y_1[i][0], m[0], m[1], m[2])
-            # meta_1.append(m)
-
-            # s0 = m[0] + np.random.uniform(low=-TAU, high=TAU)
-            # s1 = max(m[1] + np.random.uniform(low=-TAU, high=TAU), 0)
-            # s2 = max(m[2] + np.random.uniform(low=-TAU, high=TAU), 0)
-            # y_1_pos[i][0] = self.inject_mean(y_1_pos[i][0], s0, s1, s2)
-
-            # s0 = m[0] + np.random.uniform(low=NEG_RANGE, high=-TAU) if np.random.random() > 0.5 else m[0] + np.random.uniform(low=TAU, high=POS_RANGE)
-            # s1 = max(m[1] + np.random.uniform(low=NEG_RANGE, high=-TAU) if np.random.random() > 0.5 else m[1] + np.random.uniform(low=TAU, high=POS_RANGE), 0)
-            # s2 = max(m[2] + np.random.uniform(low=NEG_RANGE, high=-TAU) if np.random.random() > 0.5 else m[2] + np.random.uniform(low=TAU, high=POS_RANGE), 0)
-            # y_1_neg[i][0] = self.inject_mean(y_1_pos[i][0], s0, s1, s2)
-            # meta_1_neg.append([s0, s1, s2])
-
+    
         meta_0, meta_0_neg = np.array(meta_0), np.array(meta_0_neg)
         #meta_1, meta_1_neg = np.array(meta_1), np.array(meta_1_neg)
         #meta_1, meta_1_neg = np.array(meta_1), np.array(meta_1_neg)
