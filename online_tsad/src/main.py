@@ -68,13 +68,13 @@ if __name__ == "__main__":
         batch_size=m_config["batch_size"],
     )
 
-    pbounds = {
-        "ratio_0"  : (0.01, 0.2), "ratio_1"  : (0.01, 0.2),
-        "length_0_h0": (0.001, 1), "length_0_h1": (0.001, 1),
-        "level_0_h0" : (0.001, 1), "level_0_h1" : (0.001, 1),
-        "length_1_h0": (0.001, 1), "length_1_h1": (0.001, 1),
-        "level_1_h0" : (0.001, 1), "level_1_h1" : (0.001, 1),
-    }
+    # pbounds = {
+    #     "ratio_0"  : (0.01, 0.2), "ratio_1"  : (0.01, 0.2),
+    #     "length_0_h0": (0.001, 1), "length_0_h1": (0.001, 1),
+    #     "level_0_h0" : (0.001, 1), "level_0_h1" : (0.001, 1),
+    #     "length_1_h0": (0.001, 1), "length_1_h1": (0.001, 1),
+    #     "level_1_h0" : (0.001, 1), "level_1_h1" : (0.001, 1),
+    # }
     # best_point = {
     #     "ratio_0"  : 0.05, "ratio_1"  : 0.05,
     #     "length_0_h0": 0.1, "length_0_h1": 0.6,
@@ -98,58 +98,58 @@ if __name__ == "__main__":
     print(colored("Best F1-Score     :", 'blue'), f1score)
     print()
 
-    acquisition_function = UpperConfidenceBound(kappa=0.1)
-    optimizer = BayesianOptimization(
-        f=black_box_function,
-        acquisition_function=acquisition_function,
-        pbounds=pbounds,
-        allow_duplicate_points=True,
-        random_state=0,
-    )
+    # acquisition_function = UpperConfidenceBound(kappa=0.1)
+    # optimizer = BayesianOptimization(
+    #     f=black_box_function,
+    #     acquisition_function=acquisition_function,
+    #     pbounds=pbounds,
+    #     allow_duplicate_points=True,
+    #     random_state=0,
+    # )
 
-    best_target = -np.inf
-    number_of_random_search = 10
-    for iter in range(5):
-        print("Iteration", iter)
+    # best_target = -np.inf
+    # number_of_random_search = 10
+    # for iter in range(5):
+    #     print("Iteration", iter)
 
-        if iter < number_of_random_search:
-            next_point_to_probe = {k: np.round(np.random.uniform(v[0], v[1]), 3) for k, v in pbounds.items()}
-        else:    
-            next_point_to_probe = {k: np.round(v, 3) for k, v in optimizer.suggest().items()}
-        print("Next point to probe is:", next_point_to_probe)
+    #     if iter < number_of_random_search:
+    #         next_point_to_probe = {k: np.round(np.random.uniform(v[0], v[1]), 3) for k, v in pbounds.items()}
+    #     else:    
+    #         next_point_to_probe = {k: np.round(v, 3) for k, v in optimizer.suggest().items()}
+    #     print("Next point to probe is:", next_point_to_probe)
 
-        a_config = {
-            "ratio_anomaly": best_point["ratio_anomaly"],
-            "fixed_level": best_point["fixed_level"],
-            "fixed_length": best_point["fixed_length"],
-            "fixed_start": best_point["fixed_start"]
-        }
+    #     a_config = {
+    #         "ratio_anomaly": best_point["ratio_anomaly"],
+    #         "fixed_level": best_point["fixed_level"],
+    #         "fixed_length": best_point["fixed_length"],
+    #         "fixed_start": best_point["fixed_start"]
+    #     }
 
 
-        if a_config["fixed_length"] > 1 or a_config["ratio_anomaly"] > 1:
-            target, f1score = -10, 0
-        else:
-            model = train_model(args, m_config, train_dataloader, trainval_dataloader, a_config)
-            target, f1score = black_box_function(model, train_dataloader, val_dataloader, test_dataloader, a_config)
+    #     if a_config["fixed_length"] > 1 or a_config["ratio_anomaly"] > 1:
+    #         target, f1score = -10, 0
+    #     else:
+    #         model = train_model(args, m_config, train_dataloader, trainval_dataloader, a_config)
+    #         target, f1score = black_box_function(model, train_dataloader, val_dataloader, test_dataloader, a_config)
 
-        ### Assign a large negative score to illegal hyperparameters, i.e., with probability sum larger than 1
-        # if next_point_to_probe['length_0_h0'] + next_point_to_probe['length_0_h1'] > 0.999 or \
-        #     next_point_to_probe['length_1_h0'] + next_point_to_probe['length_1_h1'] > 0.999 or \
-        #     next_point_to_probe['level_0_h0'] + next_point_to_probe['level_0_h1'] > 0.999 or \
-        #     next_point_to_probe['level_1_h0'] + next_point_to_probe['level_1_h1'] > 0.999:
-        #     target, f1score = -10, 0
-        # else:
-        #     model = train_model(args, m_config, train_dataloader, trainval_dataloader, next_point_to_probe)
-        #     target, f1score = black_box_function(model, train_dataloader, val_dataloader, test_dataloader, next_point_to_probe)
-        print("Found the target value to be:", target)
-        print("Test F1-Score:", f1score)
+    #     ### Assign a large negative score to illegal hyperparameters, i.e., with probability sum larger than 1
+    #     # if next_point_to_probe['length_0_h0'] + next_point_to_probe['length_0_h1'] > 0.999 or \
+    #     #     next_point_to_probe['length_1_h0'] + next_point_to_probe['length_1_h1'] > 0.999 or \
+    #     #     next_point_to_probe['level_0_h0'] + next_point_to_probe['level_0_h1'] > 0.999 or \
+    #     #     next_point_to_probe['level_1_h0'] + next_point_to_probe['level_1_h1'] > 0.999:
+    #     #     target, f1score = -10, 0
+    #     # else:
+    #     #     model = train_model(args, m_config, train_dataloader, trainval_dataloader, next_point_to_probe)
+    #     #     target, f1score = black_box_function(model, train_dataloader, val_dataloader, test_dataloader, next_point_to_probe)
+    #     print("Found the target value to be:", target)
+    #     print("Test F1-Score:", f1score)
 
-        if target > best_target:
-            best_target = target
-            print(colored('Best!', 'red'))
+    #     if target > best_target:
+    #         best_target = target
+    #         print(colored('Best!', 'red'))
         
-        optimizer.register(
-            params=next_point_to_probe,
-            target=target,
-        )
-        print()
+    #     optimizer.register(
+    #         params=next_point_to_probe,
+    #         target=target,
+    #     )
+    #     print()

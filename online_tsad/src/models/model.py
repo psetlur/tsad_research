@@ -46,7 +46,7 @@ class CNNEncoder(nn.Module):
         self.contrastive_enc = nn.Sequential(
             nn.Linear(self.encoder_output_size * self.encoder_hidden_size, 128),
             nn.ReLU(),
-            nn.Dropout(p = 0.1),
+            #nn.Dropout(p = 0.1),
             nn.Linear(128, 128),
         )
 
@@ -63,10 +63,10 @@ class CNNEncoder(nn.Module):
             x = x.unsqueeze(1).permute(0, 2, 1)
         x = self.positional_encoding(x)
         x = self.encoder(x)
-        # attn = F.softmax(self.attention(x), dim = 2)
-        # x = torch.mul(attn.expand_as(x), x)
-        x = x.permute(0, 2, 1)
-        x, _ = self.multihead_attention(x, x, x)
-        x = x.permute(0, 2, 1)
+        attn = F.softmax(self.attention(x), dim = 2)
+        x = torch.mul(attn.expand_as(x), x)
+        # x = x.permute(0, 2, 1)
+        # x, _ = self.multihead_attention(x, x, x)
+        # x = x.permute(0, 2, 1)
         x = self.contrastive_enc(x.reshape(x.shape[0], -1))
         return x
