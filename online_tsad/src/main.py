@@ -15,7 +15,6 @@ from train_model import train_model
 from alignment import black_box_function
 from data.custom_dataloader import get_dataloaders
 
-
 if __name__ == "__main__":
     # Check if CUDA is available
     if torch.cuda.is_available():
@@ -56,7 +55,7 @@ if __name__ == "__main__":
 
     d_config = config["data_params"]
     m_config = config["model_params"]
-    
+
     X_train = pd.read_parquet(os.path.join(args.data_path, 'train_data.parquet'))
     X_val = pd.read_parquet(os.path.join(args.data_path, 'val_data.parquet'))
     X_test = pd.read_parquet(os.path.join(args.data_path, 'test_data.parquet'))
@@ -84,20 +83,21 @@ if __name__ == "__main__":
     # } 
     best_point = {
         "ratio_anomaly": 0.1,  # Total ratio of anomalies (e.g., 10% of the data)
-        "fixed_level": 0.5,    # Fixed level for the platform anomaly
-        "fixed_length": 0.3,   # Fixed length for the platform anomaly
-        "fixed_start": 0.2     # Fixed start position for the platform anomaly
+        "fixed_level": 0.5,  # Fixed level for the platform anomaly
+        "fixed_length": 0.3,  # Fixed length for the platform anomaly
+        "fixed_start": 0.2  # Fixed start position for the platform anomaly
     }
 
-
-    num_iterations = 5
-    for iteration in range(num_iterations):
-        model = train_model(args, m_config, train_dataloader, trainval_dataloader, best_point)
-        target, f1score = black_box_function(model, train_dataloader, val_dataloader, test_dataloader, best_point)
-        print(colored("Ground truth point:", 'blue'), best_point)
-        print(colored(f"Iteration {iteration + 1} - Target Value:", 'blue'), target)
-        print(colored(f"Iteration {iteration + 1} - F1-Score   :", 'blue'), f1score)
-        print()
+    # num_iterations = 5
+    # for iteration in range(num_iterations):
+    model = train_model(args, m_config, train_dataloader, trainval_dataloader, best_point)
+    target, f1score = black_box_function(model, train_dataloader, val_dataloader, test_dataloader, best_point)
+    print(colored("Ground truth point:", 'blue'), best_point)
+    # print(colored(f"Iteration {iteration + 1} - Target Value:", 'blue'), target)
+    # print(colored(f"Iteration {iteration + 1} - F1-Score   :", 'blue'), f1score)
+    print(colored(f"WD:", 'blue'), target)
+    print(colored(f"F1-Score:", 'blue'), f1score)
+    print()
 
     # acquisition_function = UpperConfidenceBound(kappa=0.1)
     # optimizer = BayesianOptimization(
@@ -126,7 +126,6 @@ if __name__ == "__main__":
     #         "fixed_start": best_point["fixed_start"]
     #     }
 
-
     #     if a_config["fixed_length"] > 1 or a_config["ratio_anomaly"] > 1:
     #         target, f1score = -10, 0
     #     else:
@@ -148,7 +147,7 @@ if __name__ == "__main__":
     #     if target > best_target:
     #         best_target = target
     #         print(colored('Best!', 'red'))
-        
+
     #     optimizer.register(
     #         params=next_point_to_probe,
     #         target=target,
