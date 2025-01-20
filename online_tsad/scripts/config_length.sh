@@ -1,0 +1,16 @@
+python src/main.py --fixed_level 0.5 --fixed_length 0.20
+python src/main.py --fixed_level 0.5 --fixed_length 0.22
+python src/main.py --fixed_level 0.5 --fixed_length 0.24
+python src/main.py --fixed_level 0.5 --fixed_length 0.26
+python src/main.py --fixed_level 0.5 --fixed_length 0.28
+python src/main.py --fixed_level 0.5 --fixed_length 0.30
+python src/main.py --fixed_level 0.5 --fixed_length 0.32
+python src/main.py --fixed_level 0.5 --fixed_length 0.34
+python src/main.py --fixed_level 0.5 --fixed_length 0.36
+python src/main.py --fixed_level 0.5 --fixed_length 0.38
+python src/main.py --fixed_level 0.5 --fixed_length 0.40
+python src/main.py --fixed_level 0.5 --fixed_length 0.42
+python src/main.py --fixed_level 0.5 --fixed_length 0.44
+python src/main.py --fixed_level 0.5 --fixed_length 0.46
+python src/main.py --fixed_level 0.5 --fixed_length 0.48
+python src/main.py --fixed_level 0.5 --fixed_length 0.50
