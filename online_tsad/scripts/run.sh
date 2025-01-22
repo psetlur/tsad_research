@@ -42,17 +42,17 @@ python src/utils/merge_data.py \
     --train_ratio $train_ratio \
     --val_ratio $val_ratio \
     --anomaly_ratio $anomaly_ratio
-
-### Run algorithm
-base_name="a=${anomaly_num}_${anomaly_type}"
-config_path="configs/default.yml"
-monitor="val_loss"
-results_path="results/$base_name"
-CUDA_VISIBLE_DEVICES=$gpu python src/main.py \
-    --time_id "$time_id" \
-    --data_path "data/${train_data_name}" \
-    --ckpt_name "$base_name" \
-    --ckpt_monitor "$monitor" \
-    --config_path "$config_path" \
-    # --wandb
+#
+#### Run algorithm
+#base_name="a=${anomaly_num}_${anomaly_type}"
+#config_path="configs/default.yml"
+#monitor="val_loss"
+#results_path="results/$base_name"
+#CUDA_VISIBLE_DEVICES=$gpu python src/main.py \
+#    --time_id "$time_id" \
+#    --data_path "data/${train_data_name}" \
+#    --ckpt_name "$base_name" \
+#    --ckpt_monitor "$monitor" \
+#    --config_path "$config_path" \
+#    # --wandb
 
