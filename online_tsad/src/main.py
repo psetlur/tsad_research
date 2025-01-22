@@ -14,6 +14,7 @@ from bayes_opt.acquisition import ExpectedImprovement, UpperConfidenceBound
 from train_model import train_model
 from alignment import black_box_function
 from data.custom_dataloader import get_dataloaders
+from datetime import datetime
 
 if __name__ == "__main__":
     # Check if CUDA is available
@@ -31,11 +32,11 @@ if __name__ == "__main__":
 
     # Parse arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument("--time_id", type=str, default='')
-    parser.add_argument("--data_path", type=str, default=None)
-    parser.add_argument("--ckpt_name", type=str, required=False)
-    parser.add_argument("--ckpt_monitor", type=str, required=True)
-    parser.add_argument("--config_path", type=str, required=True)
+    parser.add_argument("--time_id", type=str, default=datetime.now().strftime("%Y%m%d_%H%M%S"))
+    parser.add_argument("--data_path", type=str, default='data/mot_mix_1_hist')
+    parser.add_argument("--ckpt_name", type=str, default='a=1_mixed')
+    parser.add_argument("--ckpt_monitor", type=str, default='val_loss')
+    parser.add_argument("--config_path", type=str, default='configs/default.yml')
     parser.add_argument("--strategy", type=str, default='auto')
     parser.add_argument(
         "--test_mode", type=bool, default=False, action=argparse.BooleanOptionalAction

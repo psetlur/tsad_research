@@ -94,14 +94,6 @@ def black_box_function(model, train_dataloader, val_dataloader, test_dataloader,
     fixed_length = a_config['fixed_length']
     fixed_start = a_config['fixed_start']
 
-    fixed_level_0 = 0.5
-    fixed_length_0 = 0.3
-    fixed_start_0 = 0.2
-
-    fixed_level_1 = 0.7
-    fixed_length_1 = 0.4
-    fixed_start_1 = 0.7
-
     with torch.no_grad():
         z_train, x_train_np = [], []
         for x_batch in train_dataloader:
