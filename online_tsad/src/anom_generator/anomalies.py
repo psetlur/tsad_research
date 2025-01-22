@@ -314,6 +314,8 @@ def main():
     parser.add_argument("--aug_num", type=int, default=1)
     parser.add_argument("--name", type=str)
     parser.add_argument("--seed", type=int)
+    parser.add_argument("--fixed_level", type=float, default=None, help="Fixed level for anomalies (optional)")
+    parser.add_argument("--fixed_length", type=float, default=None, help="Fixed length for anomalies (optional)")
     args = parser.parse_args()
     # get anomaly params
     anom_params = AnomParams().anom_params
@@ -330,20 +332,26 @@ def main():
     anom_funcs = AnomFuncs(df, seed=args.seed)
 
     # generating anomalies with fixed length and varying level
-    levels = np.linspace(-1, 1, 20)
-    fixed_length = anom_params[args.name].get("length", 0.1)
-    for level in levels:
-        anom_params[args.name]["level"] = level
-        print(f"Generating anomaly with fixed length {fixed_length} and varying level {level}")
-        anom_funcs.generate_anomalies(args.anom_type, anom_params[args.name], args.truncated_length, args.aug_num, args.name)
-
-    # generating anomalies with fixed level and varying length
-    lengths = np.linspace(0.2, 0.6, 20)
-    fixed_level = anom_params[args.name].get("level", 0.5)
-    for length in lengths:
-        anom_params[args.name]["length"] = length
-        print(f"Generating anomaly with fixed level {fixed_level} and varying length {length}")
-        anom_funcs.generate_anomalies(args.anom_type, anom_params[args.name], args.truncated_length, args.aug_num, args.name)
+    if args.fixed_level is not None:
+        # Fixed level, varying length
+        length_range = np.arange(0.2, 0.62, 0.02)
+        for length in length_range:
+            anom_params[args.name]["level"] = args.fixed_level
+            anom_params[args.name]["length"] = length
+            print(f"Generating anomaly with fixed level {args.fixed_level} and varying length {length}")
+            anom_funcs.generate_anomalies(args.anom_type, anom_params[args.name], args.truncated_length, args.aug_num, args.name)
+    
+    elif args.fixed_length is not None:
+        # Fixed length, varying level
+        level_range = np.arange(-1, 1.1, 0.1)
+        for level in level_range:
+            anom_params[args.name]["length"] = args.fixed_length
+            anom_params[args.name]["level"] = level
+            print(f"Generating anomaly with fixed length {args.fixed_length} and varying level {level}")
+            anom_funcs.generate_anomalies(args.anom_type, anom_params[args.name], args.truncated_length, args.aug_num, args.name)
+    
+    else:
+        raise ValueError("Either --fixed_level or --fixed_length must be specified.")
 
 
 if __name__ == "__main__":
