@@ -1,7 +1,0 @@
-a_config:
-  fixed_length: 0.3
-  fixed_level: 0.5
-  fixed_start: 0.2
-  ratio_anomaly: 0.1
-lr: 1.0e-05
-ts_input_size: 512
