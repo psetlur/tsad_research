@@ -1,5 +1,0 @@
-.idea/
-*__pycache__
-data/
-logs/training/
-checkpoints/
