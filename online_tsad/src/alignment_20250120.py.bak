@@ -16,6 +16,7 @@ logging.getLogger("pytorch_lightning").setLevel(logging.WARNING)
 
 import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
+import matplotlib.cm as cm
 
 
 class EmbNormalizer:
@@ -380,5 +381,48 @@ def visualize(train, trn_aug, test, test_aug, fixed_level, fixed_length, varying
     plt.savefig(
         f'logs/training/level{fixed_level}length{"{:.2f}".format(fixed_length)}/level{varying_level}length{varying_length}_embedding_visualization.pdf',
         dpi=300, bbox_inches='tight')
+    # plt.show()
+    plt.close()
+
+
+def visualize_grid(train, trn_aug, test, test_aug, fixed_level, fixed_length, varying_param_name, varying_values):
+    all_data = torch.cat([train, trn_aug, test, test_aug], dim=0).cpu().numpy()
+    xt = TSNE(n_components=2, random_state=42).fit_transform(all_data)
+    plt.figure(figsize=(8, 6))
+
+    # train normal
+    plt.scatter(xt[:len(train), 0], xt[:len(train), 1], c='b', alpha=0.5, label='Train Normal')
+
+    # train Augmented
+    plt.scatter(xt[len(train):len(train) + len(trn_aug), 0], xt[len(train):len(train) + len(trn_aug), 1], c='orange',
+                alpha=0.5, label='Train Augmented')
+
+    # test normal
+    plt.scatter(xt[len(train) + len(trn_aug):len(train) + len(trn_aug) + len(test), 0],
+                xt[len(train) + len(trn_aug):len(train) + len(trn_aug) + len(test), 1], c='g', alpha=0.5,
+                label='Test Normal')
+
+    # test anomalies
+    cmap = cm.get_cmap('coolwarm', len(varying_values))
+    colors = [cmap(i) for i in range(len(varying_values))]
+
+    for i, value in enumerate(varying_values):
+        start_idx = len(train) + len(trn_aug) + len(test) + i * len(test_aug) // len(varying_values)
+        end_idx = start_idx + len(test_aug) // len(varying_values)
+        
+        plt.scatter(xt[start_idx:end_idx, 0], xt[start_idx:end_idx, 1], 
+                    c=[colors[i]] * (end_idx - start_idx), alpha=0.5, 
+                    label=f'Test Anomaly (Platform) ({varying_param_name}={value:.2f})')
+
+    plt.legend()
+    plt.xlabel('t-SNE 1')
+    plt.ylabel('t-SNE 2')
+    plt.title('t-SNE Visualization of Embeddings')
+    plt.tight_layout()
+
+    plt.savefig(
+        f'logs/training/level{fixed_level}length{"{:.2f}".format(fixed_length)}/{varying_param_name}_embedding_visualization.pdf',
+        dpi=300, bbox_inches='tight'
+    )
     # plt.show()
     plt.close()
