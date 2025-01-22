@@ -328,7 +328,22 @@ def main():
 
     # generate anomalies
     anom_funcs = AnomFuncs(df, seed=args.seed)
-    anom_funcs.generate_anomalies(args.anom_type, anom_params[args.name], args.truncated_length, args.aug_num, args.name)
+
+    # generating anomalies with fixed length and varying level
+    levels = np.linspace(-1, 1, 20)
+    fixed_length = anom_params[args.name].get("length", 0.1)
+    for level in levels:
+        anom_params[args.name]["level"] = level
+        print(f"Generating anomaly with fixed length {fixed_length} and varying level {level}")
+        anom_funcs.generate_anomalies(args.anom_type, anom_params[args.name], args.truncated_length, args.aug_num, args.name)
+
+    # generating anomalies with fixed level and varying length
+    lengths = np.linspace(0.2, 0.6, 20)
+    fixed_level = anom_params[args.name].get("level", 0.5)
+    for length in lengths:
+        anom_params[args.name]["length"] = length
+        print(f"Generating anomaly with fixed level {fixed_level} and varying length {length}")
+        anom_funcs.generate_anomalies(args.anom_type, anom_params[args.name], args.truncated_length, args.aug_num, args.name)
 
 
 if __name__ == "__main__":
