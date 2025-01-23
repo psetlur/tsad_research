@@ -3,4 +3,4 @@
 data/
 logs/training/
 checkpoints/
-#*.bak*
+*.bak*
