@@ -1,17 +1,19 @@
 import os
-import numpy as np
-
+import torch
 import pytorch_lightning as pl
 from lightning.pytorch.loggers import CSVLogger
-from lightning.pytorch import Trainer
-
 from utils import setup_checkpoint, setup_logger_and_checkpoint
 from models import load_model
-from pytorch_lightning.callbacks import EarlyStopping
+from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 
 
 def train_model(args, m_config, train_dataloader, trainval_dataloader, a_config):
-    path = "checkpoints/training"
+    path = "checkpoints/training/"
+    model = load_model(m_config, a_config)
+    ckpt = os.listdir(path)
+    if len(ckpt) > 0:
+        return model.load_from_checkpoint(path + ckpt[0])
+
     if os.path.exists(path):
         for l in os.listdir(path):
             os.remove(os.path.join(path, l))
@@ -29,7 +31,6 @@ def train_model(args, m_config, train_dataloader, trainval_dataloader, a_config)
         )
         logger = CSVLogger("logs", name="training", version='fixed_grid')
 
-    model = load_model(m_config, a_config)
     early_stop_callback = EarlyStopping(
         monitor="val_loss",
         mode="min",

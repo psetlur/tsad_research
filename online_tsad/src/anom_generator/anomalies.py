@@ -7,8 +7,8 @@ from tqdm import tqdm
 import pickle
 
 import warnings
-warnings.filterwarnings("ignore")
 
+warnings.filterwarnings("ignore")
 
 LENGTH_BINS = [0.2, 0.3, 0.4, 0.5]
 LEVEL_BINS = [-1, -0.33, 0.33, 1]
@@ -69,32 +69,32 @@ class AnomFuncs:
     def inject_platform(ts_row, level_h0, level_h1, length_h0, length_h1, start):
         start = int(len(ts_row) * start)
 
-        cdf = [0, length_h0, length_h0+length_h1, 1]
+        cdf = [0, length_h0, length_h0 + length_h1, 1]
         length_r = np.digitize(np.random.random(1), bins=cdf)[0]
-        r = np.random.uniform(LENGTH_BINS[length_r-1], LENGTH_BINS[length_r])
+        r = np.random.uniform(LENGTH_BINS[length_r - 1], LENGTH_BINS[length_r])
         length = int(len(ts_row) * r)
 
-        cdf = [0, level_h0, level_h0+level_h1, 1]
+        cdf = [0, level_h0, level_h0 + level_h1, 1]
         level_r = np.digitize(np.random.random(1), bins=cdf)[0]
-        level = np.random.uniform(LEVEL_BINS[level_r-1], LEVEL_BINS[level_r])
+        level = np.random.uniform(LEVEL_BINS[level_r - 1], LEVEL_BINS[level_r])
 
-        ts_row[start : start + length] = level
+        ts_row[start: start + length] = level
         return ts_row, start, length, level
 
     @staticmethod
     def inject_mean(ts_row, level_h0, level_h1, length_h0, length_h1, start):
         start = int(len(ts_row) * start)
 
-        cdf = [0, length_h0, length_h0+length_h1, 1]
+        cdf = [0, length_h0, length_h0 + length_h1, 1]
         length_r = np.digitize(np.random.random(1), bins=cdf)[0]
-        r = np.random.uniform(LENGTH_BINS[length_r-1], LENGTH_BINS[length_r])
+        r = np.random.uniform(LENGTH_BINS[length_r - 1], LENGTH_BINS[length_r])
         length = int(len(ts_row) * r)
 
-        cdf = [0, level_h0, level_h0+level_h1, 1]
+        cdf = [0, level_h0, level_h0 + level_h1, 1]
         level_r = np.digitize(np.random.random(1), bins=cdf)[0]
-        level = np.random.uniform(LEVEL_BINS[level_r-1], LEVEL_BINS[level_r])
+        level = np.random.uniform(LEVEL_BINS[level_r - 1], LEVEL_BINS[level_r])
 
-        ts_row[start : start + length] += level
+        ts_row[start: start + length] += level
         return ts_row, start, length, level
 
     # @staticmethod
@@ -118,7 +118,7 @@ class AnomFuncs:
     #     # ts_row[start] += level
     #     ts_row[start] = level
     #     return ts_row
-    
+
     # @staticmethod
     # def inject_amplitude(ts_row, level, start, length):
     #     start = int(len(ts_row) * start)
@@ -149,14 +149,14 @@ class AnomFuncs:
         anomaly_params = anomaly_params.copy()
         self._reset_data()
         self.rng = self._reset_rng()
-        
+
         if truncated_length != -1:
             move = int(truncated_length / 2)
             self.np_data_new = np.array(self.np_data[:, :truncated_length])
             for i in range(1, self.np_data.shape[1] - truncated_length, move):
-                self.np_data_new = np.concatenate([self.np_data_new, self.np_data[:, i:i+truncated_length]], axis=0)
+                self.np_data_new = np.concatenate([self.np_data_new, self.np_data[:, i:i + truncated_length]], axis=0)
             self.np_data = self.np_data_new
-  
+
         if aug_num != 1:
             new_aug_data = np.array(self.np_data)
             for _ in range(aug_num - 1):
@@ -180,9 +180,9 @@ class AnomFuncs:
                 }
             if anomaly_type == "platform":
                 self.np_data[i, :], start, length, level = self.inject_platform(
-                    self.np_data[i, :], 
-                    anomaly_params['level_h0'], anomaly_params['level_h1'], 
-                    anomaly_params['length_h0'], anomaly_params['length_h1'], 
+                    self.np_data[i, :],
+                    anomaly_params['level_h0'], anomaly_params['level_h1'],
+                    anomaly_params['length_h0'], anomaly_params['length_h1'],
                     anomaly_params['start']
                 )
                 anomaly_params_processed['start'][i] = start
@@ -194,9 +194,9 @@ class AnomFuncs:
                 )
             elif anomaly_type == "mean":
                 self.np_data[i, :], start, length, level = self.inject_mean(
-                    self.np_data[i, :], 
-                    anomaly_params['level_h0'], anomaly_params['level_h1'], 
-                    anomaly_params['length_h0'], anomaly_params['length_h1'], 
+                    self.np_data[i, :],
+                    anomaly_params['level_h0'], anomaly_params['level_h1'],
+                    anomaly_params['length_h0'], anomaly_params['length_h1'],
                     anomaly_params['start']
                 )
                 anomaly_params_processed['start'][i] = start
@@ -256,7 +256,6 @@ class AnomFuncs:
         df_injected.to_parquet(f"{self.save_path}/{name}/generated_tsa.parquet", index=False)
         print(f"Anomalies saved to {self.save_path}/{name}/generated_tsa.parquet")
 
-
     def _process_params(self, anomaly_params, data_shape, rng):
         # Check which of the parameters are lists
         check_variable_params = [isinstance(p, list) for p in anomaly_params.values()]
@@ -314,8 +313,8 @@ def main():
     parser.add_argument("--aug_num", type=int, default=1)
     parser.add_argument("--name", type=str)
     parser.add_argument("--seed", type=int)
-    parser.add_argument("--fixed_level", type=float, default=None, help="Fixed level for anomalies (optional)")
-    parser.add_argument("--fixed_length", type=float, default=None, help="Fixed length for anomalies (optional)")
+    # parser.add_argument("--fixed_level", type=float, default=None, help="Fixed level for anomalies (optional)")
+    # parser.add_argument("--fixed_length", type=float, default=None, help="Fixed length for anomalies (optional)")
     args = parser.parse_args()
     # get anomaly params
     anom_params = AnomParams().anom_params
@@ -330,30 +329,31 @@ def main():
 
     # generate anomalies
     anom_funcs = AnomFuncs(df, seed=args.seed)
+    anom_funcs.generate_anomalies(args.anom_type, anom_params[args.name], args.truncated_length, args.aug_num,
+                                  args.name)
 
-    # generating anomalies with fixed length and varying level
-    if args.fixed_level is not None:
-        # Fixed level, varying length
-        length_range = np.arange(0.2, 0.62, 0.02)
-        for length in length_range:
-            anom_params[args.name]["level"] = args.fixed_level
-            anom_params[args.name]["length"] = length
-            print(f"Generating anomaly with fixed level {args.fixed_level} and varying length {length}")
-            anom_funcs.generate_anomalies(args.anom_type, anom_params[args.name], args.truncated_length, args.aug_num, args.name)
-    
-    elif args.fixed_length is not None:
-        # Fixed length, varying level
-        level_range = np.arange(-1, 1.1, 0.1)
-        for level in level_range:
-            anom_params[args.name]["length"] = args.fixed_length
-            anom_params[args.name]["level"] = level
-            print(f"Generating anomaly with fixed length {args.fixed_length} and varying level {level}")
-            anom_funcs.generate_anomalies(args.anom_type, anom_params[args.name], args.truncated_length, args.aug_num, args.name)
-    
-    else:
-        raise ValueError("Either --fixed_level or --fixed_length must be specified.")
+    # # generating anomalies with fixed length and varying level
+    # if args.fixed_level is not None:
+    #     # Fixed level, varying length
+    #     length_range = np.arange(0.2, 0.62, 0.02)
+    #     for length in length_range:
+    #         anom_params[args.name]["level"] = args.fixed_level
+    #         anom_params[args.name]["length"] = length
+    #         print(f"Generating anomaly with fixed level {args.fixed_level} and varying length {length}")
+    #         anom_funcs.generate_anomalies(args.anom_type, anom_params[args.name], args.truncated_length, args.aug_num, args.name)
+    #
+    # elif args.fixed_length is not None:
+    #     # Fixed length, varying level
+    #     level_range = np.arange(-1, 1.1, 0.1)
+    #     for level in level_range:
+    #         anom_params[args.name]["length"] = args.fixed_length
+    #         anom_params[args.name]["level"] = level
+    #         print(f"Generating anomaly with fixed length {args.fixed_length} and varying level {level}")
+    #         anom_funcs.generate_anomalies(args.anom_type, anom_params[args.name], args.truncated_length, args.aug_num, args.name)
+    #
+    # else:
+    #     raise ValueError("Either --fixed_level or --fixed_length must be specified.")
 
 
 if __name__ == "__main__":
     main()
-

@@ -1,6 +1,6 @@
 #!/bin/bash
 # Used for training TSA-AP model
-set -e
+#set -e
 
 ### Anomaly Types: platform, trend, extremum, mean, amplitude, frequency, shift
 ### Only platform and mean support histogram distribution now
