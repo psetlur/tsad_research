@@ -1,19 +1,26 @@
 import numpy as np
-
 import torch
-from torch import nn
-import torch.nn.functional as F
-
 import pytorch_lightning as pl
 from info_nce import InfoNCE
-
 from .model import CNNEncoder
+import random
 
 LENGTH_BINS = [0.2, 0.3, 0.4, 0.5]
 LEVEL_BINS = [-1, -0.33, 0.33, 1]
 TAU = 0.01
 NEG_RANGE = -0.5
 POS_RANGE = 0.5
+
+# fixed a config for platform anomaly - trial 1
+FIXED_LEVEL = 0.5
+FIXED_LENGTH = 0.3
+FIXED_START = 0.2
+
+# fixed a grid for platform anomaly - trial 2
+GRID_LEVEL = np.round(np.arange(-1, 1.2, 0.2), 1)
+GRID_LENGTH = np.round(np.arange(0.2, 0.54, 0.04), 2)
+CDF_LEVEL = np.arange(0, 1, 1 / len(GRID_LEVEL))
+CDF_LENGTH = np.arange(0, 1, 1 / len(GRID_LENGTH))
 
 
 def hist_sample(cdf, bins):
@@ -89,22 +96,12 @@ class Encoder(pl.LightningModule):
         # y_0_neg, y_1_neg = x.clone(), x.clone()
         # meta_0, meta_1, meta_0_neg, meta_1_neg = [], [], [], []
 
-        # fixed a config for platform anomaly - trial 1
-        fixed_level_0 = 0.5
-        fixed_length_0 = 0.3
-        fixed_start_0 = 0.2
+        # # adding another anomaly - trial 2
+        # fixed_level_1 = 0.7
+        # fixed_length_1 = 0.4
+        # fixed_start_1 = 0.7
 
-        # select configs from a fixed grid for platform anomaly - trial 2
-        grid_level = np.round(np.arange(-1, 1.2, 0.2), 1)
-        grid_length = np.round(np.arange(0.2, 0.54, 0.04), 2)
-        cdf_level = np.arange(0, 1, 1 / len(grid_level))
-        cdf_length = np.arange(0, 1, 1 / len(grid_length))
-        fixed_start_0 = 0.2
-
-        # adding another anomaly - trial 2
-        fixed_level_1 = 0.7
-        fixed_length_1 = 0.4
-        fixed_start_1 = 0.7
+        anomalies_start = random.choices([i for i in np.arange(0, 0.5, 0.01)], k=len(x))
 
         y_0, y_1 = x.clone(), x.clone()
         y_0_pos, y_1_pos = x.clone(), x.clone()
@@ -119,9 +116,9 @@ class Encoder(pl.LightningModule):
             # meta_0.append(m)
 
             # First platform anomaly
-            # m0 = [fixed_level_0, fixed_start_0, fixed_length_0]
-            m0 = [fixed_config_from_grid(cdf_level, grid_level), fixed_start_0,
-                  fixed_config_from_grid(cdf_length, grid_length)]
+            # m0 = [FIXED_LEVEL, FIXED_START, FIXED_LENGTH]
+            m0 = [fixed_config_from_grid(CDF_LEVEL, GRID_LEVEL), anomalies_start[i],
+                  fixed_config_from_grid(CDF_LENGTH, GRID_LENGTH)]
             y_0[i][0] = self.inject_platform(y_0[i][0], *m0)
             meta_0.append(m0)
 
@@ -131,15 +128,12 @@ class Encoder(pl.LightningModule):
             s2_0 = max(m0[2] + np.random.uniform(low=-TAU, high=TAU), 0)
             y_0_pos[i][0] = self.inject_platform(y_0_pos[i][0], s0_0, s1_0, s2_0)
 
-            s0_0_neg = m0[0] + np.random.uniform(low=NEG_RANGE, high=-TAU) if np.random.random() > 0.5 else m0[
-                                                                                                                0] + np.random.uniform(
-                low=TAU, high=POS_RANGE)
-            s1_0_neg = max(m0[1] + np.random.uniform(low=NEG_RANGE, high=-TAU) if np.random.random() > 0.5 else m0[
-                                                                                                                    1] + np.random.uniform(
-                low=TAU, high=POS_RANGE), 0)
-            s2_0_neg = max(m0[2] + np.random.uniform(low=NEG_RANGE, high=-TAU) if np.random.random() > 0.5 else m0[
-                                                                                                                    2] + np.random.uniform(
-                low=TAU, high=POS_RANGE), 0)
+            s0_0_neg = m0[0] + np.random.uniform(low=NEG_RANGE, high=-TAU) \
+                if np.random.random() > 0.5 else m0[0] + np.random.uniform(low=TAU, high=POS_RANGE)
+            s1_0_neg = max(m0[1] + np.random.uniform(low=NEG_RANGE, high=-TAU)
+                           if np.random.random() > 0.5 else m0[1] + np.random.uniform(low=TAU, high=POS_RANGE), 0)
+            s2_0_neg = max(m0[2] + np.random.uniform(low=NEG_RANGE, high=-TAU)
+                           if np.random.random() > 0.5 else m0[2] + np.random.uniform(low=TAU, high=POS_RANGE), 0)
             y_0_neg[i][0] = self.inject_platform(y_0_neg[i][0], s0_0_neg, s1_0_neg, s2_0_neg)
             meta_0_neg.append([s0_0_neg, s1_0_neg, s2_0_neg])
 
@@ -186,22 +180,12 @@ class Encoder(pl.LightningModule):
         # y_0_neg, y_1_neg = x.clone(), x.clone()
         # meta_0, meta_1, meta_0_neg, meta_1_neg = [], [], [], []
 
-        # fixed parameters for platform anomaly - trial 1
-        fixed_level_0 = 0.5
-        fixed_length_0 = 0.3
-        fixed_start_0 = 0.2
+        # # adding another anomaly - trial 2
+        # fixed_level_1 = 0.7
+        # fixed_length_1 = 0.4
+        # fixed_start_1 = 0.7
 
-        # select configs from a fixed grid for platform anomaly - trial 2
-        grid_level = np.round(np.arange(-1, 1.2, 0.2), 1)
-        grid_length = np.round(np.arange(0.2, 0.54, 0.04), 2)
-        cdf_level = np.arange(0, 1.1, 1 / len(grid_level))
-        cdf_length = np.arange(0, 1.1, 1 / len(grid_length))
-        fixed_start_0 = 0.2
-
-        # adding another anomaly - trial 2
-        fixed_level_1 = 0.7
-        fixed_length_1 = 0.4
-        fixed_start_1 = 0.7
+        anomalies_start = random.choices([i for i in np.arange(0, 0.5, 0.01)], k=len(x))
 
         y_0, y_1 = x.clone(), x.clone()
         y_0_pos, y_1_pos = x.clone(), x.clone()
@@ -212,9 +196,9 @@ class Encoder(pl.LightningModule):
         for i in range(len(x)):
             ### Platform anomaly
             # m = [hist_sample(level_0_cdf, LEVEL_BINS), np.random.uniform(0, 0.5), hist_sample(length_0_cdf, LENGTH_BINS)]
-            # m0 = [fixed_level_0, fixed_start_0, fixed_length_0]
-            m0 = [fixed_config_from_grid(cdf_level, grid_level), fixed_start_0,
-                  fixed_config_from_grid(cdf_length, grid_length)]
+            # m0 = [FIXED_LEVEL, FIXED_START, FIXED_LENGTH]
+            m0 = [fixed_config_from_grid(CDF_LEVEL, GRID_LEVEL), anomalies_start[i],
+                  fixed_config_from_grid(CDF_LENGTH, GRID_LENGTH)]
             y_0[i][0] = self.inject_platform(y_0[i][0], *m0)
             meta_0.append(m0)
 
@@ -225,15 +209,12 @@ class Encoder(pl.LightningModule):
             y_0_pos[i][0] = self.inject_platform(y_0_pos[i][0], s0_0, s1_0, s2_0)
 
             # negative sample
-            s0_0_neg = m0[0] + np.random.uniform(low=NEG_RANGE, high=-TAU) if np.random.random() > 0.5 else m0[
-                                                                                                                0] + np.random.uniform(
-                low=TAU, high=POS_RANGE)
-            s1_0_neg = max(m0[1] + np.random.uniform(low=NEG_RANGE, high=-TAU) if np.random.random() > 0.5 else m0[
-                                                                                                                    1] + np.random.uniform(
-                low=TAU, high=POS_RANGE), 0)
-            s2_0_neg = max(m0[2] + np.random.uniform(low=NEG_RANGE, high=-TAU) if np.random.random() > 0.5 else m0[
-                                                                                                                    2] + np.random.uniform(
-                low=TAU, high=POS_RANGE), 0)
+            s0_0_neg = m0[0] + np.random.uniform(low=NEG_RANGE, high=-TAU) \
+                if np.random.random() > 0.5 else m0[0] + np.random.uniform(low=TAU, high=POS_RANGE)
+            s1_0_neg = max(m0[1] + np.random.uniform(low=NEG_RANGE, high=-TAU)
+                           if np.random.random() > 0.5 else m0[1] + np.random.uniform(low=TAU, high=POS_RANGE), 0)
+            s2_0_neg = max(m0[2] + np.random.uniform(low=NEG_RANGE, high=-TAU)
+                           if np.random.random() > 0.5 else m0[2] + np.random.uniform(low=TAU, high=POS_RANGE), 0)
             y_0_neg[i][0] = self.inject_platform(y_0_neg[i][0], s0_0_neg, s1_0_neg, s2_0_neg)
             meta_0_neg.append([s0_0_neg, s1_0_neg, s2_0_neg])
 

@@ -30,8 +30,9 @@ if __name__ == "__main__":
 
         train_df.append(normal_df.iloc[train_idx])
 
-        val_idx_0, val_idx_1 = train_test_split(val_idx, test_size=args.anomaly_ratio, random_state=args.seed)
-        val_df.append(pd.concat([normal_df.iloc[val_idx_0], anomaly_df.iloc[val_idx_1]], axis=0))
+        # val_idx_0, val_idx_1 = train_test_split(val_idx, test_size=args.anomaly_ratio, random_state=args.seed)
+        # val_df.append(pd.concat([normal_df.iloc[val_idx_0], anomaly_df.iloc[val_idx_1]], axis=0))
+        val_df.append(normal_df.iloc[val_idx])
 
         test_idx_0, test_idx_1 = train_test_split(test_idx, test_size=args.anomaly_ratio, random_state=args.seed)
         test_df.append(pd.concat([normal_df.iloc[test_idx_0], anomaly_df.iloc[test_idx_1]], axis=0))
