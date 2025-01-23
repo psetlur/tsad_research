@@ -10,6 +10,7 @@ from sklearn.metrics import f1_score
 from sklearn.model_selection import train_test_split
 
 import logging
+
 logging.getLogger("lightning.pytorch.utilities.rank_zero").setLevel(logging.WARNING)
 logging.getLogger("pytorch_lightning").setLevel(logging.WARNING)
 
@@ -44,8 +45,8 @@ def inject_platform(ts_row, level, start, length):
     label = np.zeros(len(ts_row))
     start_a = int(len(ts_row) * start)
     length_a = int(len(ts_row) * length)
-    ts_row[start_a : start_a + length_a] = level
-    label[start_a : start_a + length_a] = 1
+    ts_row[start_a: start_a + length_a] = level
+    label[start_a: start_a + length_a] = 1
     return ts_row, label
 
 
@@ -54,8 +55,8 @@ def inject_mean(ts_row, level, start, length):
     label = np.zeros(len(ts_row))
     start_a = int(len(ts_row) * start)
     length_a = int(len(ts_row) * length)
-    ts_row[start_a : start_a + length_a] += float(level)
-    label[start_a : start_a + length_a] = 1
+    ts_row[start_a: start_a + length_a] += float(level)
+    label[start_a: start_a + length_a] = 1
     ts_row = ((ts_row - ts_row.min()) / (ts_row.max() - ts_row.min())) * 2 - 1
     return ts_row, label
 
@@ -82,13 +83,13 @@ def classify(X_train, y_train, X_test):
 
 def hist_sample(cdf, bins):
     bin_idx = np.digitize(np.random.random(1), bins=cdf)[0]
-    val = np.random.uniform(bins[bin_idx-1], bins[bin_idx])
+    val = np.random.uniform(bins[bin_idx - 1], bins[bin_idx])
     return val
 
 
 def black_box_function(model, train_dataloader, val_dataloader, test_dataloader, a_config):
     n_trials = 1
-    #ratio_0, ratio_1 = a_config['ratio_0'], a_config['ratio_1']
+    # ratio_0, ratio_1 = a_config['ratio_0'], a_config['ratio_1']
     ratio_anomaly = a_config['ratio_anomaly']
     fixed_level = a_config['fixed_level']
     fixed_length = a_config['fixed_length']
@@ -117,7 +118,7 @@ def black_box_function(model, train_dataloader, val_dataloader, test_dataloader,
             for i, m in enumerate(y_batch.squeeze()):
                 m_start, m_length, _, m_type = m[-4:]
                 if m_type != -1:
-                    y_batch_t[i, int(m_start):int(m_start)+int(m_length)] = 1
+                    y_batch_t[i, int(m_start):int(m_start) + int(m_length)] = 1
             y_test.append(y_batch_t)
             t_test.append(y_batch[:, 0, -1])
         z_test = torch.cat(z_test, dim=0)
@@ -128,8 +129,9 @@ def black_box_function(model, train_dataloader, val_dataloader, test_dataloader,
         total_loss = []
         fscore = []
         for seed in range(n_trials):
-            train_index, test_index = train_test_split(range(len(x_train_np)), train_size=1-ratio_anomaly, random_state=seed)
-            #test_index_0, test_index_1 = train_test_split(test_index, train_size=ratio_0/(ratio_0+ratio_1), random_state=seed)
+            train_index, test_index = train_test_split(range(len(x_train_np)), train_size=1 - ratio_anomaly,
+                                                       random_state=seed)
+            # test_index_0, test_index_1 = train_test_split(test_index, train_size=ratio_0/(ratio_0+ratio_1), random_state=seed)
 
             x_aug, labels = [], []
             for i in test_index:
@@ -138,12 +140,13 @@ def black_box_function(model, train_dataloader, val_dataloader, test_dataloader,
                 #     xa, l = inject_platform(x, fixed_level_0, fixed_start_0, fixed_length_0)
                 # else:
                 #     xa, l = inject_platform(x, fixed_level_1, fixed_start_1, fixed_length_1)
-                xa, l = inject_platform(x, fixed_level, fixed_start, fixed_length) 
+                xa, l = inject_platform(x, fixed_level, fixed_start, fixed_length)
                 x_aug.append(xa)
                 labels.append(l)
-   
+
             z_aug = model(torch.tensor(np.array(x_aug)).float().unsqueeze(1).to(0)).detach().cpu()
-            z_train_t, z_aug_t, z_valid_t = emb(z_train[train_index].clone().squeeze(), z_aug.clone().squeeze(), z_valid.clone().squeeze())
+            z_train_t, z_aug_t, z_valid_t = emb(z_train[train_index].clone().squeeze(), z_aug.clone().squeeze(),
+                                                z_valid.clone().squeeze())
 
             W_loss = geomloss.SamplesLoss("sinkhorn", p=2, blur=0.05, scaling=0.9)
             loss = -W_loss(torch.cat([z_train_t, z_aug_t], dim=0), z_valid_t).item()
@@ -152,7 +155,8 @@ def black_box_function(model, train_dataloader, val_dataloader, test_dataloader,
             z_test_t = emb.normalize(z_test)
             X = np.concatenate([z_train_t.numpy(), z_aug_t.numpy()], axis=0)
             y = np.concatenate([np.zeros((len(train_index), x_train_np.shape[1])), labels], axis=0)
-            y_pred = classify(torch.tensor(X).float().to('cuda:0'), torch.tensor(y).float().to('cuda:0'), z_test_t.to('cuda:0'))
+            y_pred = classify(torch.tensor(X).float().to('cuda:0'), torch.tensor(y).float().to('cuda:0'),
+                              z_test_t.to('cuda:0'))
             fscore.append(f1_score(y_test.reshape(-1), y_pred.reshape(-1)))
 
         total_loss = np.mean(total_loss)
@@ -161,6 +165,7 @@ def black_box_function(model, train_dataloader, val_dataloader, test_dataloader,
         visualize_embedding(z_train, z_aug, z_test, y_test)
 
     return total_loss, fscore
+
 
 # def black_box_function(model, train_dataloader, val_dataloader, test_dataloader, a_config):
 #     n_trials = 1
@@ -246,16 +251,17 @@ def black_box_function(model, train_dataloader, val_dataloader, test_dataloader,
 def visualize_embedding(z_train, z_aug, z_test, y_test):
     y_test_t = np.max(y_test, axis=1)
     xt = TSNE(n_components=2, random_state=42).fit_transform(torch.cat([z_train, z_aug, z_test], dim=0).cpu().numpy())
-    
+
     plt.figure(figsize=(8, 6))
     plt.scatter(xt[:len(z_train), 0], xt[:len(z_train), 1], c='b', alpha=0.5, label='Train Normal')
-    plt.scatter(xt[len(z_train):len(z_train)+len(z_aug), 0],
-                xt[len(z_train):len(z_train)+len(z_aug), 1], c='orange', alpha=0.5, label='Train Augmented')
+    plt.scatter(xt[len(z_train):len(z_train) + len(z_aug), 0],
+                xt[len(z_train):len(z_train) + len(z_aug), 1], c='orange', alpha=0.5, label='Train Augmented')
     plt.scatter(xt[np.where(y_test_t == 0)[0] + len(z_train) + len(z_aug), 0],
                 xt[np.where(y_test_t == 0)[0] + len(z_train) + len(z_aug), 1], c='g', alpha=0.5, label='Test Normal')
     plt.scatter(xt[np.where(y_test_t == 1)[0] + len(z_train) + len(z_aug), 0],
-                xt[np.where(y_test_t == 1)[0] + len(z_train) + len(z_aug), 1], c='r', alpha=0.5, label='Test Anomaly (Platform)')
-    
+                xt[np.where(y_test_t == 1)[0] + len(z_train) + len(z_aug), 1], c='r', alpha=0.5,
+                label='Test Anomaly (Platform)')
+
     plt.legend()
     plt.title('t-SNE Visualization of Embeddings')
     plt.xlabel('t-SNE 1')
@@ -263,3 +269,46 @@ def visualize_embedding(z_train, z_aug, z_test, y_test):
     plt.tight_layout()
     plt.savefig('embedding_visualization.pdf', dpi=300, bbox_inches='tight')
     plt.show()
+
+
+def visualize_grid(train, trn_aug, test, test_aug, fixed_level, fixed_length, varying_param_name, varying_values):
+    all_data = torch.cat([train, trn_aug, test, test_aug], dim=0).cpu().numpy()
+    xt = TSNE(n_components=2, random_state=42).fit_transform(all_data)
+    plt.figure(figsize=(8, 6))
+
+    # train normal
+    plt.scatter(xt[:len(train), 0], xt[:len(train), 1], c='b', alpha=0.5, label='Train Normal')
+
+    # train Augmented
+    plt.scatter(xt[len(train):len(train) + len(trn_aug), 0], xt[len(train):len(train) + len(trn_aug), 1], c='orange',
+                alpha=0.5, label='Train Augmented')
+
+    # test normal
+    plt.scatter(xt[len(train) + len(trn_aug):len(train) + len(trn_aug) + len(test), 0],
+                xt[len(train) + len(trn_aug):len(train) + len(trn_aug) + len(test), 1], c='g', alpha=0.5,
+                label='Test Normal')
+
+    # test anomalies
+    cmap = cm.get_cmap('coolwarm', len(varying_values))
+    colors = [cmap(i) for i in range(len(varying_values))]
+
+    for i, value in enumerate(varying_values):
+        start_idx = len(train) + len(trn_aug) + len(test) + i * len(test_aug) // len(varying_values)
+        end_idx = start_idx + len(test_aug) // len(varying_values)
+
+        plt.scatter(xt[start_idx:end_idx, 0], xt[start_idx:end_idx, 1],
+                    c=[colors[i]] * (end_idx - start_idx), alpha=0.5,
+                    label=f'Test Anomaly (Platform) ({varying_param_name}={value:.2f})')
+
+    plt.legend()
+    plt.xlabel('t-SNE 1')
+    plt.ylabel('t-SNE 2')
+    plt.title('t-SNE Visualization of Embeddings')
+    plt.tight_layout()
+
+    plt.savefig(
+        f'logs/training/level{fixed_level}length{"{:.2f}".format(fixed_length)}/{varying_param_name}_embedding_visualization.pdf',
+        dpi=300, bbox_inches='tight'
+    )
+    # plt.show()
+    plt.close()
