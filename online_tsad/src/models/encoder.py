@@ -165,7 +165,9 @@ class Encoder(pl.LightningModule):
         # outputs = self(torch.cat([x, y_0, y_0_pos, y_0_neg, x_pos], dim=0))
         # outputs = self(torch.cat([x, y_0, y_0_pos, y_0_neg, y_1, y_1_pos, y_1_neg, x_pos], dim=0))
         # c_x, c_y_0, c_y_0_pos, c_y_0_neg, c_y_1, c_y_1_pos, c_y_1_neg, c_x_pos = torch.split(outputs, x.shape[0], dim=0)
-        c_x, *c_y_pos, *c_y_neg = torch.split(outputs, [x.shape[0]] + [x.shape[0]]*num_positives + [x.shape[0]]*num_negatives, dim=0)
+        c_x, *c_y_pos = torch.split(outputs, [x.shape[0]] + [x.shape[0]]*num_positives, dim=0)
+        c_y_neg = torch.split(outputs[len(c_x) + len(c_y_pos):], [x.shape[0]]*num_negatives, dim=0)
+
         #c_x, c_y_0, c_y_0_pos, c_y_0_neg, c_x_pos = torch.split(outputs, x.shape[0], dim=0)
 
         ### Anomalies should be close to the ones with the same type and similar hyperparameters, and far away from the ones with different types and normal.
@@ -233,7 +235,8 @@ class Encoder(pl.LightningModule):
         all_samples = torch.cat([x] + y_pos + y_neg + [x_pos], dim=0)
         outputs = self(all_samples)
 
-        c_x, *c_y_pos, *c_y_neg, c_x_pos = torch.split(outputs, [x.shape[0]] + [x.shape[0]]*3 + [x.shape[0]]*10 + [x.shape[0]], dim=0)
+        c_x, *c_y_pos, c_x_pos = torch.split(outputs, [x.shape[0]] + [x.shape[0]]*3 + [x.shape[0]], dim=0)
+        c_y_neg = torch.split(outputs[len(c_x) + len(c_y_pos) + len(c_x_pos):], [x.shape[0]]*10, dim=0)
 
 
         # loss_global_0 = self.info_loss(c_y_0, c_y_0_pos, torch.cat([c_x, c_x_pos, c_y_1, c_y_1_pos], dim=0))
