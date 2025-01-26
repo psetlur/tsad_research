@@ -147,7 +147,7 @@ class Encoder(pl.LightningModule):
                 neg_variation = [
                     m0[0] + np.random.uniform(NEG_RANGE, -TAU) \
                         if np.random.random() > 0.5 else m0[0] + np.random.uniform(TAU, POS_RANGE),
-                    max(m0[1] + np.random.uniform(NEG_RANGE, -TAU) \ 
+                    max(m0[1] + np.random.uniform(NEG_RANGE, -TAU) \
                         if np.random.random() > 0.5 else m0[1] + np.random.uniform(TAU, POS_RANGE), 0),
                     max(m0[2] + np.random.uniform(NEG_RANGE, -TAU) \
                         if np.random.random() > 0.5 else m0[2] + np.random.uniform(TAU, POS_RANGE), 0)
