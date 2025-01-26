@@ -83,7 +83,7 @@ class Encoder(pl.LightningModule):
         if batch_idx not in self.normal_idx:
             self.normal_idx.add(batch_idx)
             self.normal_x = torch.cat([self.normal_x, x], dim=0)
-        x_pos = self.normal_x[np.random.choice(len(self.normal_x), x.shape[0])]
+        #x_pos = self.normal_x[np.random.choice(len(self.normal_x), x.shape[0])]
 
         # a_config = self.a_config
         # level_0_cdf  = [0, a_config['level_0_h0'] , a_config['level_0_h0']  + a_config['level_0_h1'] , 1]
@@ -101,13 +101,23 @@ class Encoder(pl.LightningModule):
         # fixed_length_1 = 0.4
         # fixed_start_1 = 0.7
 
-        anomalies_start = random.choices([i for i in np.arange(0, 0.5, 0.01)], k=len(x))
+        #anomalies_start = random.choices([i for i in np.arange(0, 0.5, 0.01)], k=len(x))
 
-        y_0, y_1 = x.clone(), x.clone()
-        y_0_pos, y_1_pos = x.clone(), x.clone()
-        y_0_neg, y_1_neg = x.clone(), x.clone()
-        meta_0, meta_1 = [], []
-        meta_0_neg, meta_1_neg = [], []
+        # y_0, y_1 = x.clone(), x.clone()
+        # y_0_pos, y_1_pos = x.clone(), x.clone()
+        # y_0_neg, y_1_neg = x.clone(), x.clone()
+        # meta_0, meta_1 = [], []
+        # meta_0_neg, meta_1_neg = [], []
+
+        # multiple positive samples
+        num_positives = 3
+        y_pos = [x.clone() for _ in range(num_positives)]
+        meta_pos = []
+
+        # multiple negative samples
+        num_negatives = 10
+        y_neg = [x.clone() for _ in range(num_negatives)]
+        meta_neg = []
 
         for i in range(len(x)):
             ### Platform anomaly
@@ -115,52 +125,64 @@ class Encoder(pl.LightningModule):
             # y_0[i][0] = self.inject_platform(y_0[i][0], m[0], m[1], m[2])
             # meta_0.append(m)
 
-            # First platform anomaly
+            # First platform anomaly - original
             # m0 = [FIXED_LEVEL, FIXED_START, FIXED_LENGTH]
-            m0 = [fixed_config_from_grid(CDF_LEVEL, GRID_LEVEL), anomalies_start[i],
+            m0 = [fixed_config_from_grid(CDF_LEVEL, GRID_LEVEL), 
+                  random.choice(np.arange(0, 0.5, 0.01)),
                   fixed_config_from_grid(CDF_LENGTH, GRID_LENGTH)]
-            y_0[i][0] = self.inject_platform(y_0[i][0], *m0)
-            meta_0.append(m0)
+            # y_0[i][0] = self.inject_platform(y_0[i][0], *m0)
+            # meta_0.append(m0)
 
-            # Positive and negative samples for first anomaly
-            s0_0 = m0[0] + np.random.uniform(low=-TAU, high=TAU)
-            s1_0 = max(m0[1] + np.random.uniform(low=-TAU, high=TAU), 0)
-            s2_0 = max(m0[2] + np.random.uniform(low=-TAU, high=TAU), 0)
-            y_0_pos[i][0] = self.inject_platform(y_0_pos[i][0], s0_0, s1_0, s2_0)
+            # generate positive samples
+            for j in range(num_positives):
+                pos_variation = [
+                    m0[0] + np.random.uniform(-TAU, TAU),
+                    max(m0[1] + np.random.uniform(-TAU, TAU), 0),
+                    max(m0[2] + np.random.uniform(-TAU, TAU), 0)
+                ]
+                y_pos[j][i][0] = self.inject_platform(y_pos[j][i][0], *pos_variation)
+            
+            # generate negative samples
+            for j in range(num_negatives):
+                neg_variation = [
+                    m0[0] + np.random.uniform(NEG_RANGE, -TAU) \
+                        if np.random.random() > 0.5 else m0[0] + np.random.uniform(TAU, POS_RANGE),
+                    max(m0[1] + np.random.uniform(NEG_RANGE, -TAU) \ 
+                        if np.random.random() > 0.5 else m0[1] + np.random.uniform(TAU, POS_RANGE), 0),
+                    max(m0[2] + np.random.uniform(NEG_RANGE, -TAU) \
+                        if np.random.random() > 0.5 else m0[2] + np.random.uniform(TAU, POS_RANGE), 0)
+                ]
+                y_neg[j][i][0] = self.inject_platform(y_neg[j][i][0], *neg_variation)
+            
+        # concatenating samples
+        all_samples = torch.cat([x] + y_pos + y_neg, dim = 0)
+        outputs = self(all_samples)
 
-            s0_0_neg = m0[0] + np.random.uniform(low=NEG_RANGE, high=-TAU) \
-                if np.random.random() > 0.5 else m0[0] + np.random.uniform(low=TAU, high=POS_RANGE)
-            s1_0_neg = max(m0[1] + np.random.uniform(low=NEG_RANGE, high=-TAU)
-                           if np.random.random() > 0.5 else m0[1] + np.random.uniform(low=TAU, high=POS_RANGE), 0)
-            s2_0_neg = max(m0[2] + np.random.uniform(low=NEG_RANGE, high=-TAU)
-                           if np.random.random() > 0.5 else m0[2] + np.random.uniform(low=TAU, high=POS_RANGE), 0)
-            y_0_neg[i][0] = self.inject_platform(y_0_neg[i][0], s0_0_neg, s1_0_neg, s2_0_neg)
-            meta_0_neg.append([s0_0_neg, s1_0_neg, s2_0_neg])
+        # meta_0, meta_0_neg = np.array(meta_0), np.array(meta_0_neg)
+        # # meta_1, meta_1_neg = np.array(meta_1), np.array(meta_1_neg)
+        # # meta_1, meta_1_neg = np.array(meta_1), np.array(meta_1_neg)
 
-        meta_0, meta_0_neg = np.array(meta_0), np.array(meta_0_neg)
-        # meta_1, meta_1_neg = np.array(meta_1), np.array(meta_1_neg)
-        # meta_1, meta_1_neg = np.array(meta_1), np.array(meta_1_neg)
-
-        outputs = self(torch.cat([x, y_0, y_0_pos, y_0_neg, x_pos], dim=0))
+        # outputs = self(torch.cat([x, y_0, y_0_pos, y_0_neg, x_pos], dim=0))
         # outputs = self(torch.cat([x, y_0, y_0_pos, y_0_neg, y_1, y_1_pos, y_1_neg, x_pos], dim=0))
         # c_x, c_y_0, c_y_0_pos, c_y_0_neg, c_y_1, c_y_1_pos, c_y_1_neg, c_x_pos = torch.split(outputs, x.shape[0], dim=0)
-        c_x, c_y_0, c_y_0_pos, c_y_0_neg, c_x_pos = torch.split(outputs, x.shape[0], dim=0)
+        c_x, *c_y_pos, *c_y_neg = torch.split(outputs, [x.shape[0]] + [x.shape[0]]*num_positives + [x.shape[0]]*num_negatives, dim=0)
+        #c_x, c_y_0, c_y_0_pos, c_y_0_neg, c_x_pos = torch.split(outputs, x.shape[0], dim=0)
 
         ### Anomalies should be close to the ones with the same type and similar hyperparameters, and far away from the ones with different types and normal.
         # loss_global_0 = self.info_loss(c_y_0, c_y_0_pos, torch.cat([c_x, c_x_pos, c_y_1, c_y_1_pos, c_y_1_neg], dim=0))
         # loss_global_1 = self.info_loss(c_y_1, c_y_1_pos, torch.cat([c_x, c_x_pos, c_y_0, c_y_0_pos, c_y_0_neg], dim=0))
         # loss_global = loss_global_0 + loss_global_1
-        loss_global = self.info_loss(c_y_0, c_y_0_pos, torch.cat([c_x, c_x_pos], dim=0))
+        loss_global = sum(self.info_loss(c_x, c_y_p, torch.cat([c_x] + c_y_neg, dim=0)) for c_y_p in c_y_pos)
 
         ### Anomalies with far away hyperparameters should be far away propotional to delta.
         # loss_local_0 = hard_negative_loss(c_y_0, c_y_0_pos, c_y_0_neg, meta_0, meta_0_neg)
         # loss_local_1 = hard_negative_loss(c_y_1, c_y_1_pos, c_y_1_neg, meta_1, meta_1_neg)
         # loss_local = loss_local_0 + loss_local_1
-        loss_local = hard_negative_loss(c_y_0, c_y_0_pos, c_y_0_neg, meta_0, meta_0_neg)
+        loss_local = sum(hard_negative_loss(c_x, c_y_p, torch.stack(c_y_neg), meta_pos[i], meta_neg) for i, c_y_p in enumerate(c_y_pos))
 
         ### Nomral should be close to each other, and far away from anomalies.
         # loss_normal = self.info_loss(c_x, c_x_pos, torch.cat([c_y_0, c_y_0_pos, c_y_0_neg, c_y_1, c_y_1_pos, c_y_1_neg], dim=0))
-        loss_normal = self.info_loss(c_x, c_x_pos, torch.cat([c_y_0, c_y_0_pos, c_y_0_neg], dim=0))
+        loss_normal = self.info_loss(c_x, c_x, torch.cat([torch.cat(c_y_pos, dim=0), torch.cat(c_y_neg, dim=0)], dim=0))
 
         loss = loss_global + loss_local + loss_normal
         self.log("train_loss", loss, prog_bar=True)
@@ -168,30 +190,13 @@ class Encoder(pl.LightningModule):
 
     def validation_step(self, x, batch_idx):
         x_pos = self.normal_x[np.random.choice(len(self.normal_x), x.shape[0])]
-
-        # a_config = self.a_config
-        # level_0_cdf  = [0, a_config['level_0_h0'] , a_config['level_0_h0']  + a_config['level_0_h1'] , 1]
-        # length_0_cdf = [0, a_config['length_0_h0'], a_config['length_0_h0'] + a_config['length_0_h1'], 1]
-        # level_1_cdf  = [0, a_config['level_1_h0'] , a_config['level_1_h0']  + a_config['level_1_h1'] , 1]
-        # length_1_cdf = [0, a_config['length_1_h0'], a_config['length_1_h0'] + a_config['length_1_h1'], 1]
-
-        # y_0, y_1 = x.clone(), x.clone()
-        # y_0_pos, y_1_pos = x.clone(), x.clone()
-        # y_0_neg, y_1_neg = x.clone(), x.clone()
-        # meta_0, meta_1, meta_0_neg, meta_1_neg = [], [], [], []
-
-        # # adding another anomaly - trial 2
-        # fixed_level_1 = 0.7
-        # fixed_length_1 = 0.4
-        # fixed_start_1 = 0.7
-
+        
         anomalies_start = random.choices([i for i in np.arange(0, 0.5, 0.01)], k=len(x))
 
-        y_0, y_1 = x.clone(), x.clone()
-        y_0_pos, y_1_pos = x.clone(), x.clone()
-        y_0_neg, y_1_neg = x.clone(), x.clone()
-        meta_0, meta_1 = [], []
-        meta_0_neg, meta_1_neg = [], []
+        y_pos = [x.clone() for _ in range(3)]  # Multiple positive samples
+        y_neg = [x.clone() for _ in range(10)]  # Multiple negative samples
+        meta_pos = []
+        meta_neg = []
 
         for i in range(len(x)):
             ### Platform anomaly
@@ -199,80 +204,51 @@ class Encoder(pl.LightningModule):
             # m0 = [FIXED_LEVEL, FIXED_START, FIXED_LENGTH]
             m0 = [fixed_config_from_grid(CDF_LEVEL, GRID_LEVEL), anomalies_start[i],
                   fixed_config_from_grid(CDF_LENGTH, GRID_LENGTH)]
+            y_0 = x.clone()
             y_0[i][0] = self.inject_platform(y_0[i][0], *m0)
-            meta_0.append(m0)
 
             # positive sample
-            s0_0 = m0[0] + np.random.uniform(low=-TAU, high=TAU)
-            s1_0 = max(m0[1] + np.random.uniform(low=-TAU, high=TAU), 0)
-            s2_0 = max(m0[2] + np.random.uniform(low=-TAU, high=TAU), 0)
-            y_0_pos[i][0] = self.inject_platform(y_0_pos[i][0], s0_0, s1_0, s2_0)
+            for j in range(3):
+                pos_variation = [
+                    m0[0] + np.random.uniform(-TAU, TAU),
+                    max(m0[1] + np.random.uniform(-TAU, TAU), 0),
+                    max(m0[2] + np.random.uniform(-TAU, TAU), 0)
+                ]
+                y_pos[j][i][0] = self.inject_platform(y_pos[j][i][0], *pos_variation)
+                meta_pos.append(pos_variation)
 
             # negative sample
-            s0_0_neg = m0[0] + np.random.uniform(low=NEG_RANGE, high=-TAU) \
-                if np.random.random() > 0.5 else m0[0] + np.random.uniform(low=TAU, high=POS_RANGE)
-            s1_0_neg = max(m0[1] + np.random.uniform(low=NEG_RANGE, high=-TAU)
-                           if np.random.random() > 0.5 else m0[1] + np.random.uniform(low=TAU, high=POS_RANGE), 0)
-            s2_0_neg = max(m0[2] + np.random.uniform(low=NEG_RANGE, high=-TAU)
-                           if np.random.random() > 0.5 else m0[2] + np.random.uniform(low=TAU, high=POS_RANGE), 0)
-            y_0_neg[i][0] = self.inject_platform(y_0_neg[i][0], s0_0_neg, s1_0_neg, s2_0_neg)
-            meta_0_neg.append([s0_0_neg, s1_0_neg, s2_0_neg])
+            for j in range(10):
+                neg_variation = [
+                    m0[0] + np.random.uniform(NEG_RANGE, -TAU) \
+                        if np.random.random() > 0.5 else m0[0] + np.random.uniform(TAU, POS_RANGE),
+                    max(m0[1] + np.random.uniform(NEG_RANGE, -TAU) \
+                        if np.random.random() > 0.5 else m0[1] + np.random.uniform(TAU, POS_RANGE), 0),
+                    max(m0[2] + np.random.uniform(NEG_RANGE, -TAU) \
+                        if np.random.random() > 0.5 else m0[2] + np.random.uniform(TAU, POS_RANGE), 0)
+                ]
+                y_neg[j][i][0] = self.inject_platform(y_neg[j][i][0], *neg_variation)
+                meta_neg.append(neg_variation)
 
-            # # Second platform anomaly
-            # m1 = [fixed_level_1, fixed_start_1, fixed_length_1]
-            # y_1[i][0] = self.inject_platform(y_1[i][0], *m1)
-            # meta_1.append(m1)
+        all_samples = torch.cat([x] + y_pos + y_neg + [x_pos], dim=0)
+        outputs = self(all_samples)
 
-            # # Positive and negative samples for second anomaly
-            # s0_1 = m1[0] + np.random.uniform(low=-TAU, high=TAU)
-            # s1_1 = max(m1[1] + np.random.uniform(low=-TAU, high=TAU), 0)
-            # s2_1 = max(m1[2] + np.random.uniform(low=-TAU, high=TAU), 0)
-            # y_1_pos[i][0] = self.inject_platform(y_1_pos[i][0], s0_1, s1_1, s2_1)
+        c_x, *c_y_pos, *c_y_neg, c_x_pos = torch.split(outputs, [x.shape[0]] + [x.shape[0]]*3 + [x.shape[0]]*10 + [x.shape[0]], dim=0)
 
-            # s0_1_neg = m1[0] + np.random.uniform(low=NEG_RANGE, high=-TAU) if np.random.random() > 0.5 else m1[0] + np.random.uniform(low=TAU, high=POS_RANGE)
-            # s1_1_neg = max(m1[1] + np.random.uniform(low=NEG_RANGE, high=-TAU) if np.random.random() > 0.5 else m1[1] + np.random.uniform(low=TAU, high=POS_RANGE), 0)
-            # s2_1_neg = max(m1[2] + np.random.uniform(low=NEG_RANGE, high=-TAU) if np.random.random() > 0.5 else m1[2] + np.random.uniform(low=TAU, high=POS_RANGE), 0)
-            # y_1_neg[i][0] = self.inject_platform(y_1_neg[i][0], s0_1_neg, s1_1_neg, s2_1_neg)
-            # meta_1_neg.append([s0_1_neg, s1_1_neg, s2_1_neg])
-
-            # ### Mean shift anomaly
-            # m = [hist_sample(level_1_cdf, LEVEL_BINS), np.random.uniform(0, 0.5), hist_sample(length_1_cdf, LENGTH_BINS)]
-            # m[0] = min(m[0], -0.1) if m[0] < 0 else max(m[0], 0.1)
-            # y_1[i][0] = self.inject_mean(y_1[i][0], m[0], m[1], m[2])
-            # meta_1.append(m)
-
-            # s0 = m[0] + np.random.uniform(low=-TAU, high=TAU)
-            # s1 = max(m[1] + np.random.uniform(low=-TAU, high=TAU), 0)
-            # s2 = max(m[2] + np.random.uniform(low=-TAU, high=TAU), 0)
-            # y_1_pos[i][0] = self.inject_mean(y_1_pos[i][0], s0, s1, s2)
-
-            # s0 = m[0] + np.random.uniform(low=NEG_RANGE, high=-TAU) if np.random.random() > 0.5 else m[0] + np.random.uniform(low=TAU, high=POS_RANGE)
-            # s1 = max(m[1] + np.random.uniform(low=NEG_RANGE, high=-TAU) if np.random.random() > 0.5 else m[1] + np.random.uniform(low=TAU, high=POS_RANGE), 0)
-            # s2 = max(m[2] + np.random.uniform(low=NEG_RANGE, high=-TAU) if np.random.random() > 0.5 else m[2] + np.random.uniform(low=TAU, high=POS_RANGE), 0)
-            # y_1_neg[i][0] = self.inject_mean(y_1_pos[i][0], s0, s1, s2)
-            # meta_1_neg.append([s0, s1, s2])
-
-        meta_0, meta_0_neg = np.array(meta_0), np.array(meta_0_neg)
-        # meta_1, meta_1_neg = np.array(meta_1), np.array(meta_1_neg)
-        # meta_1, meta_1_neg = np.array(meta_1), np.array(meta_1_neg)
-
-        # outputs = self(torch.cat([x, y_0, y_0_pos, y_0_neg, y_1, y_1_pos, y_1_neg, x_pos], dim=0))
-        # c_x, c_y_0, c_y_0_pos, c_y_0_neg, c_y_1, c_y_1_pos, c_y_1_neg, c_x_pos = torch.split(outputs, x.shape[0], dim=0)
-        outputs = self(torch.cat([x, y_0, y_0_pos, y_0_neg, x_pos], dim=0))
-        c_x, c_y_0, c_y_0_pos, c_y_0_neg, c_x_pos = torch.split(outputs, x.shape[0], dim=0)
 
         # loss_global_0 = self.info_loss(c_y_0, c_y_0_pos, torch.cat([c_x, c_x_pos, c_y_1, c_y_1_pos], dim=0))
         # loss_global_1 = self.info_loss(c_y_1, c_y_1_pos, torch.cat([c_x, c_x_pos, c_y_0, c_y_0_pos], dim=0))
         # loss_global = loss_global_0 + loss_global_1
-        loss_global = self.info_loss(c_y_0, c_y_0_pos, torch.cat([c_x, c_x_pos], dim=0))
+        loss_global = sum(self.info_loss(c_x, c_y_p, torch.cat([c_x] + c_y_neg, dim=0)) for c_y_p in c_y_pos)
 
         # loss_local_0 = hard_negative_loss(c_y_0, c_y_0_pos, c_y_0_neg, meta_0, meta_0_neg)
         # loss_local_1 = hard_negative_loss(c_y_1, c_y_1_pos, c_y_1_neg, meta_1, meta_1_neg)
         # loss_local = loss_local_0 + loss_local_1
-        loss_local = hard_negative_loss(c_y_0, c_y_0_pos, c_y_0_neg, meta_0, meta_0_neg)
+        loss_local = sum(hard_negative_loss(c_x, c_y_p, torch.stack(c_y_neg), meta_pos[i], meta_neg[i]) 
+                     for i, c_y_p in enumerate(c_y_pos))
 
         # loss_normal = self.info_loss(c_x, c_x_pos, torch.cat([c_y_0, c_y_0_pos, c_y_1, c_y_1_pos], dim=0))
-        loss_normal = self.info_loss(c_x, c_x_pos, torch.cat([c_y_0, c_y_0_pos], dim=0))
+        loss_normal = self.info_loss(c_x, c_x_pos, torch.cat([torch.cat(c_y_pos, dim=0), torch.cat(c_y_neg, dim=0)], dim=0))
 
         loss = loss_global + loss_local + loss_normal
         self.log("loss_global", loss_global, prog_bar=True)
