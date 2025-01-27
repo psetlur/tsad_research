@@ -10,9 +10,10 @@ from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 def train_model(args, m_config, train_dataloader, trainval_dataloader, a_config):
     path = "checkpoints/training/"
     model = load_model(m_config, a_config)
-    ckpt = os.listdir(path)
-    if len(ckpt) > 0:
-        return model.load_from_checkpoint(path + ckpt[0])
+    if os.path.exists(path):
+        ckpt = os.listdir(path)
+        if len(ckpt) > 0:
+            return model.load_from_checkpoint(path + ckpt[0])
 
     if os.path.exists(path):
         for l in os.listdir(path):
@@ -34,7 +35,7 @@ def train_model(args, m_config, train_dataloader, trainval_dataloader, a_config)
     early_stop_callback = EarlyStopping(
         monitor="val_loss",
         mode="min",
-        patience=10
+        patience=100
     )
     trainer = pl.Trainer(
         strategy=args.strategy,
