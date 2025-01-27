@@ -38,13 +38,16 @@ def hard_negative_loss(z_anc, z_pos, z_neg, meta_anc, meta_neg, temperature=0.1)
     if meta_neg.dim() == 1:
         meta_neg = meta_neg.unsqueeze(0)
 
+    z_anc_flat = z_anc.view(-1, z_anc.size(-1)) if z_anc.dim() == 3 else z_anc
+    z_neg_flat = z_neg.view(-1, z_neg.size(-1)) if z_neg.dim() == 3 else z_neg
+
     neg_weights = torch.cdist(meta_anc, meta_neg, p=1)
 
     # neg score weighted by absolute distance of hyperparameters
-    neg = torch.exp(neg_weights * torch.mm(z_anc, z_neg.t().contiguous()) / temperature).sum(dim=-1)
+    neg = torch.exp(neg_weights * torch.mm(z_anc_flat, z_neg_flat.t().contiguous()) / temperature).sum(dim=-1)
 
     # pos score
-    pos = torch.exp(torch.sum(z_anc * z_pos, dim=-1) / temperature)
+    pos = torch.exp(torch.sum(z_anc_flat * z_pos, dim=-1) / temperature)
 
     # contrastive loss
     loss = (-torch.log(pos / (pos + neg))).mean()
