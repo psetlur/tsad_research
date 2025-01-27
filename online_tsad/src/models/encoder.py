@@ -108,6 +108,7 @@ class Encoder(pl.LightningModule):
                     max(m0[2] + np.random.uniform(-TAU, TAU), 0)
                 ]
                 y_pos[j][i][0] = self.inject_platform(y_pos[j][i][0], *pos_variation)
+                meta_pos.append(pos_variation)
             
             # generate negative samples
             for j in range(num_negatives):
@@ -120,6 +121,7 @@ class Encoder(pl.LightningModule):
                         if np.random.random() > 0.5 else m0[2] + np.random.uniform(TAU, POS_RANGE), 0)
                 ]
                 y_neg[j][i][0] = self.inject_platform(y_neg[j][i][0], *neg_variation)
+                meta_neg.append(neg_variation)
             
         # concatenating samples
         all_samples = torch.cat([x] + y_pos + y_neg, dim = 0)
