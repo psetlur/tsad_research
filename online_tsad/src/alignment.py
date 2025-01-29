@@ -18,7 +18,7 @@ logging.getLogger("pytorch_lightning").setLevel(logging.WARNING)
 import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
 import matplotlib.cm as cm
-
+import random
 
 class EmbNormalizer:
     def __init__(self, mode="tpsd"):
@@ -139,10 +139,7 @@ def black_box_function(model, train_dataloader, val_dataloader, test_dataloader,
         for train_level in train_levels:
             train_index, ttest_index = train_test_split(range(len(x_train_np)), train_size=1 - ratio_anomaly,
                                                         random_state = 0)
-            # valid_index, vtest_index = train_test_split(range(len(x_valid_np)), train_size=1 - ratio_anomaly,
-            #                                             random_state=seed)
-            # test_index_0, test_index_1 = train_test_split(test_index, train_size=ratio_0/(ratio_0+ratio_1), random_state=seed)
-            
+    
             # inject training anomalies for the current training level
             x_train_aug, train_labels = [], []
             for i in ttest_index:
@@ -157,7 +154,7 @@ def black_box_function(model, train_dataloader, val_dataloader, test_dataloader,
                 x_aug, labels = [], []
                 for i in range(len(x_valid_np)):
                     x = x_valid_np[i]
-                    xa, l = inject_platform(x, level, fixed_start, fixed_length)
+                    xa, l = inject_platform(x, level, fixed_start, random.choice(lengths))
                     x_aug.append(xa)
                     labels.append(l)
                 x_aug_level_list.append(x_aug)
@@ -234,10 +231,6 @@ def black_box_function(model, train_dataloader, val_dataloader, test_dataloader,
                                  'level', f'length{fixed_length}', 1)
             visualize_fixed_grid(z_train, z_valid, z_train_aug, z_aug_level_list, train_levels, levels,
                                  'level', f'length{fixed_length}', -1)
-        # total_loss = np.mean(total_loss)
-        # fscore = np.mean(fscore)
-        #
-        # visualize_embedding(z_train, z_aug, z_test, y_test)
 
     return total_loss, fscore
 
