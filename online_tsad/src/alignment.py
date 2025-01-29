@@ -168,7 +168,7 @@ def black_box_function(model, train_dataloader, val_dataloader, test_dataloader,
                 labels_length_list.append(labels)
 
             train_x_aug_level_list, train_labels_level_list = [], []
-            x_aug, labels = []
+            x_aug, labels = [], []
             for i in ttest_index:
                 x = x_train_np[i]
                 xa, l = inject_platform(x, train_level, fixed_start, fixed_length)
