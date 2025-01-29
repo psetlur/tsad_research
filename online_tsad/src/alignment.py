@@ -91,7 +91,8 @@ def hist_sample(cdf, bins):
 
 def black_box_function(model, train_dataloader, val_dataloader, test_dataloader, a_config):
     n_trials = 1
-    
+    device = next(model.parameters()).device 
+
     ratio_anomaly = 0.1
     levels = np.round(np.arange(-1.0, 1.1, 0.1), 1)
     lengths = np.round(np.arange(0.2, 0.52, 0.02), 2)
@@ -107,7 +108,7 @@ def black_box_function(model, train_dataloader, val_dataloader, test_dataloader,
         def get_embeddings(dataloader):
             z_data, x_data_np = [], []
             for x_batch in dataloader:
-                c_x = model(x_batch.to(0).detach().cpu())
+                c_x = model(x_batch.to(device))
                 z_data.append(c_x)
                 x_data_np.append(x_batch.numpy())
             z_data = torch.cat(z_data, dim = 0)
@@ -119,7 +120,7 @@ def black_box_function(model, train_dataloader, val_dataloader, test_dataloader,
 
         z_test, y_test, t_test = [], [], []
         for x_batch, y_batch in test_dataloader:
-            c_x = model(x_batch.to(0)).detach().cpu()
+            c_x = model(x_batch.to(device))
             z_test.append(c_x)
             y_batch_t = np.zeros((x_batch.shape[0], x_batch.shape[2]))
             for i, m in enumerate(y_batch.squeeze()):
@@ -173,18 +174,18 @@ def black_box_function(model, train_dataloader, val_dataloader, test_dataloader,
 
             
             # getting embddings for training and testing anomalies
-            z_aug_level_list = [model(torch.tensor(np.array(x_aug_level)).float().unsqueeze(1).to(0)).detach().cpu()
-                                for x_aug_level in x_aug_level_list]
-            z_aug_length_list = [model(torch.tensor(np.array(x_aug_length)).float().unsqueeze(1).to(0)).detach().cpu()
-                                 for x_aug_length in x_aug_length_list]
+            z_aug_level_list = [model(torch.tensor(np.array(x_aug_level)).float().unsqueeze(1).to(device)).detach().cpu()
+                    for x_aug_level in x_aug_level_list]
+            z_aug_length_list = [model(torch.tensor(np.array(x_aug_length)).float().unsqueeze(1).to(device)).detach().cpu()
+                     for x_aug_length in x_aug_length_list]
 
-            z_train_aug = model(torch.tensor(np.array(x_train_aug)).float().unsqueeze(1).to(0)).detach().cpu()
+            z_train_aug = model(torch.tensor(np.array(x_train_aug)).float().unsqueeze(1).to(device)).detach().cpu()
             z_aug_level_list = [
-                model(torch.tensor(np.array(x_aug_level)).float().unsqueeze(1).to(0)).detach().cpu()
+                model(torch.tensor(np.array(x_aug_level)).float().unsqueeze(1).to(device)).detach().cpu()
                 for x_aug_level in x_aug_level_list
             ]
             z_aug_length_list = [
-                model(torch.tensor(np.array(x_aug_length)).float().unsqueeze(1).to(0)).detach().cpu()
+                model(torch.tensor(np.array(x_aug_length)).float().unsqueeze(1).to(device)).detach().cpu()
                 for x_aug_length in x_aug_length_list
             ]
 
@@ -213,14 +214,14 @@ def black_box_function(model, train_dataloader, val_dataloader, test_dataloader,
                 axis=0,
             )
             y_pred = classify(
-                torch.tensor(X).float().to("cuda:0"),
-                torch.tensor(y).float().to("cuda:0"),
+                torch.tensor(X).float().to(device),
+                torch.tensor(y).float().to(device),
                 torch.tensor(
                     np.concatenate([
                         z_valid.numpy(),
                         np.concatenate([z.numpy() for z in z_aug_level_list + z_aug_length_list], axis=0)
                     ], axis=0)
-                ).float().to("cuda:0"),
+                ).float().to(device),
             )
             y_valid = np.concatenate(
                 [np.zeros((len(train_index), x_valid_np.shape[1])), np.concatenate(labels_level_list, axis=0)], axis=0
