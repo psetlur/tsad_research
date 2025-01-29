@@ -108,7 +108,7 @@ def black_box_function(model, train_dataloader, val_dataloader, test_dataloader,
         def get_embeddings(dataloader):
             z_data, x_data_np = [], []
             for x_batch in dataloader:
-                c_x = model(x_batch.to(device))
+                c_x = model(x_batch.to(device)).detach().cpu()
                 z_data.append(c_x)
                 x_data_np.append(x_batch.numpy())
             z_data = torch.cat(z_data, dim = 0)
@@ -120,7 +120,7 @@ def black_box_function(model, train_dataloader, val_dataloader, test_dataloader,
 
         z_test, y_test, t_test = [], [], []
         for x_batch, y_batch in test_dataloader:
-            c_x = model(x_batch.to(device))
+            c_x = model(x_batch.to(device)).detach().cpu()
             z_test.append(c_x)
             y_batch_t = np.zeros((x_batch.shape[0], x_batch.shape[2]))
             for i, m in enumerate(y_batch.squeeze()):
@@ -140,20 +140,15 @@ def black_box_function(model, train_dataloader, val_dataloader, test_dataloader,
         for train_level in train_levels:
             train_index, ttest_index = train_test_split(range(len(x_train_np)), train_size=1 - ratio_anomaly,
                                                         random_state = 0)
+            valid_index, vtest_index = train_test_split(range(len(x_valid_np)), train_size=1 - ratio_anomaly,
+                                                        random_state = 0)
     
-            # inject training anomalies for the current training level
-            x_train_aug, train_labels = [], []
-            for i in ttest_index:
-                x = x_train_np[i]
-                xa, l = inject_platform(x, train_level, fixed_start, fixed_length)
-                x_train_aug.append(xa)
-                train_labels.append(l)
             
             # inject test anomalies for all test levels
             x_aug_level_list, labels_level_list = [], []
             for level in levels:
                 x_aug, labels = [], []
-                for i in range(len(x_valid_np)):
+                for i in vtest_index:
                     x = x_valid_np[i]
                     xa, l = inject_platform(x, level, fixed_start, random.choice(lengths))
                     x_aug.append(xa)
@@ -164,7 +159,7 @@ def black_box_function(model, train_dataloader, val_dataloader, test_dataloader,
             x_aug_length_list, labels_length_list = [], []
             for length in lengths:
                 x_aug, labels = [], []
-                for i in range(len(x_valid_np)):
+                for i in vtest_index:
                     x = x_valid_np[i]
                     xa, l = inject_platform(x, train_level, fixed_start, length)
                     x_aug.append(xa)
@@ -172,40 +167,55 @@ def black_box_function(model, train_dataloader, val_dataloader, test_dataloader,
                 x_aug_length_list.append(x_aug)
                 labels_length_list.append(labels)
 
+            train_x_aug_level_list, train_labels_level_list = [], []
+            x_aug, labels = []
+            for i in ttest_index:
+                x = x_train_np[i]
+                xa, l = inject_platform(x, train_level, fixed_start, fixed_length)
+                x_aug.append(xa)
+                labels.append(l)
+            train_x_aug_level_list.append(x_aug)
+            train_labels_level_list.append(labels)
+
             
             # getting embddings for training and testing anomalies
-            z_aug_level_list = [model(torch.tensor(np.array(x_aug_level)).float().unsqueeze(1).to(device)).detach().cpu()
+            z_aug_level_list = [model(torch.tensor(np.array(x_aug_level_list)).float().unsqueeze(1).to(device)).detach().cpu()
                     for x_aug_level in x_aug_level_list]
-            z_aug_length_list = [model(torch.tensor(np.array(x_aug_length)).float().unsqueeze(1).to(device)).detach().cpu()
-                     for x_aug_length in x_aug_length_list]
+            #z_aug_length_list = [model(torch.tensor(np.array(x_aug_length)).float().unsqueeze(1).to(device)).detach().cpu()
+              #       for x_aug_length in x_aug_length_list]
 
-            z_train_aug = model(torch.tensor(np.array(x_train_aug)).float().unsqueeze(1).to(device)).detach().cpu()
-            z_aug_level_list = [
-                model(torch.tensor(np.array(x_aug_level)).float().unsqueeze(1).to(device)).detach().cpu()
-                for x_aug_level in x_aug_level_list
-            ]
-            z_aug_length_list = [
-                model(torch.tensor(np.array(x_aug_length)).float().unsqueeze(1).to(device)).detach().cpu()
-                for x_aug_length in x_aug_length_list
-            ]
+            z_train_aug_level_list = [model(torch.tensor(np.array(x_aug_level)).float().unsqueeze(1).to(device)).detach().cpu() \
+                                      for x_aug_level in train_x_aug_level_list]
+            # z_aug_level_list = [
+            #     model(torch.tensor(np.array(x_aug_level)).float().unsqueeze(1).to(device)).detach().cpu()
+            #     for x_aug_level in x_aug_level_list
+            # ]
+            # z_aug_length_list = [
+            #     model(torch.tensor(np.array(x_aug_length)).float().unsqueeze(1).to(device)).detach().cpu()
+            #     for x_aug_length in x_aug_length_list
+            # ]
+
+            z_aug = model(torch.tensor(np.array(x_aug)).float().unsqueeze(1).to(device)).detach().cpu()
 
             # Normalize embeddings
-            z_train_t, z_aug_t_level_list, z_aug_t_length_list = emb(
+            z_train_t, z_aug_t, z_valid_t = emb(
                 z_train[train_index].clone().squeeze(),
-                [emb.normalize(z_aug_level) for z_aug_level in z_aug_level_list],
-                [emb.normalize(z_aug_length) for z_aug_length in z_aug_length_list],
-            )
+                z_aug.clone().squeeze(),
+                z_valid[valid_index].clone().squeeze())
+            
+            z_aug_t_level_list = [emb.normalize(z_aug_level) for z_aug_level in z_aug_level_list]
+            z_train_aug_t_level_list = [emb.normalize(z_aug_level) for z_aug_level in z_train_aug_level_list]
 
             # computing WD loss
             W_loss = geomloss.SamplesLoss("sinkhorn", p=2, blur=0.05, scaling=0.9)
-            loss = -W_loss(
-                z_train_t,
-                torch.cat(z_aug_t_level_list + z_aug_t_length_list, dim=0),
-            ).item()
+            loss = -W_loss(torch.cat(
+                [z_train_t, torch.cat(z_train_aug_t_level_list, dim = 0),
+                 torch.ca(z_valid_t, torch.cat(z_aug_t_level_list, dim = 0))]
+            ))
             total_loss.append(loss)
 
             # Compute F1 score
-            X = np.concatenate([z_train_t.numpy()] + [z.numpy() for z in z_aug_t_level_list + z_aug_t_length_list], axis=0)
+            X = np.concatenate([z_train_t.numpy(), torch.cat(z_train_aug_t_level_list, dim = 0).numpy()], axis = 0)
             y = np.concatenate(
                 [
                     np.zeros((len(train_index), x_train_np.shape[1])),
@@ -218,13 +228,13 @@ def black_box_function(model, train_dataloader, val_dataloader, test_dataloader,
                 torch.tensor(y).float().to(device),
                 torch.tensor(
                     np.concatenate([
-                        z_valid.numpy(),
-                        np.concatenate([z.numpy() for z in z_aug_level_list + z_aug_length_list], axis=0)
+                        z_valid_t,
+                        np.concatenate(z_aug_t_level_list, axis = 0)
                     ], axis=0)
                 ).float().to(device),
             )
             y_valid = np.concatenate(
-                [np.zeros((len(train_index), x_valid_np.shape[1])), np.concatenate(labels_level_list, axis=0)], axis=0
+                [np.zeros((len(valid_index), x_valid_np.shape[1])), np.concatenate(labels_level_list, axis=0)], axis=0
             )
             fscore.append(f1_score(y_valid.reshape(-1), y_pred.reshape(-1)))
 
