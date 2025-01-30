@@ -5,3 +5,4 @@ data/*
 logs/training/
 checkpoints/
 *.bak*
+test.py

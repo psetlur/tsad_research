@@ -15,8 +15,7 @@ def setup_checkpoint(name, monitor):
     return pl.callbacks.ModelCheckpoint(
         monitor=monitor,
         dirpath=f"checkpoints/{name}/",
-        filename=f"model_epoch" + "-{" + monitor + ":.2f}",
+        filename=f"model",
         save_top_k=1,
-        # save_last=True,
         mode="min",
     )

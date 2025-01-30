@@ -1,10 +1,9 @@
 import os
-import torch
 import pytorch_lightning as pl
 from lightning.pytorch.loggers import CSVLogger
 from utils import setup_checkpoint, setup_logger_and_checkpoint
 from models import load_model
-from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
+from pytorch_lightning.callbacks import EarlyStopping
 
 
 def train_model(args, m_config, train_dataloader, trainval_dataloader, a_config):
@@ -30,7 +29,7 @@ def train_model(args, m_config, train_dataloader, trainval_dataloader, a_config)
             name="training",
             monitor=args.ckpt_monitor,
         )
-        logger = CSVLogger("logs", name="training", version='fixed_grid')
+        logger = CSVLogger("logs", name="training", version='grid')
 
     early_stop_callback = EarlyStopping(
         monitor="val_loss",

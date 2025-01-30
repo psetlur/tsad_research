@@ -93,13 +93,13 @@ if __name__ == "__main__":
     # for iteration in range(num_iterations):
     model = train_model(args, m_config, train_dataloader, trainval_dataloader, best_point)
     wd, f1score = black_box_function(model, train_dataloader, val_dataloader, test_dataloader, best_point)
-    print(colored("Ground truth point:", 'blue'), best_point)
+    # print(colored("Ground truth point:", 'blue'), best_point)
     # print(colored(f"Iteration {iteration + 1} - Target Value:", 'blue'), target)
     # print(colored(f"Iteration {iteration + 1} - F1-Score   :", 'blue'), f1score)
     print(colored(f"WD:", 'blue'), wd)
     print(colored(f"F1-Score:", 'blue'), f1score)
     print()
-    with open(f'logs/training/fixed_grid/wd_f1score.txt', 'w') as file:
+    with open(f'logs/training/more_negative/wd_f1score.txt', 'w') as file:
         file.write('wd: ' + str(wd))
         file.write("\n")
         file.write('f1score: ' + str(f1score))
