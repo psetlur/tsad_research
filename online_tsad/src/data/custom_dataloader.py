@@ -25,7 +25,7 @@ class CustomDataset(Dataset):
             return self.x[idx], self.y[idx]
 
 
-def get_dataloaders(train, val, test, batch_size, num_workers=0):
+def get_dataloaders(train, val, test, batch_size, num_workers=16):
     """
     Creates dataloaders for training, validation, and testing with potential metadata
     """
