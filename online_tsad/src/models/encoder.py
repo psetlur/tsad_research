@@ -4,6 +4,7 @@ import pytorch_lightning as pl
 from info_nce import InfoNCE
 from .model import CNNEncoder
 import random
+import itertools
 
 LENGTH_BINS = [0.2, 0.3, 0.4, 0.5]
 LEVEL_BINS = [-1, -0.33, 0.33, 1]
@@ -21,6 +22,19 @@ GRID_LEVEL = np.round(np.arange(-1, 1.1, 0.1), 1)
 GRID_LENGTH = np.round(np.arange(0.2, 0.52, 0.02), 2)
 CDF_LEVEL = np.arange(0, 1, 1 / len(GRID_LEVEL))
 CDF_LENGTH = np.arange(0, 1, 1 / len(GRID_LENGTH))
+
+step_size = 3
+sampled_levels = GRID_LEVEL[::step_size]
+sampled_lengths = GRID_LENGTH[::step_size]
+
+negatives = [(l, le) for l in sampled_levels for le in sampled_lengths]
+print(f"Total negatives selected: {len(negatives)}")
+
+'''
+math explanation - 21 points in GRID_LEVEL, 16 points in GRID_LENGTH, so there are 21 * 16 = 336 grid cells
+336 is too large and will make training too slow, so we randomly sample the grid into a few broad regions and pick negatives
+from each region to maintain diversity
+'''
 
 
 def hist_sample(cdf, bins):
@@ -99,7 +113,7 @@ class Encoder(pl.LightningModule):
         meta_pos = []
 
         # multiple negative samples
-        num_negatives = 10
+        num_negatives = len(negatives)
         y_neg = [x.clone() for _ in range(num_negatives)]
         meta_neg = []
 
@@ -119,16 +133,12 @@ class Encoder(pl.LightningModule):
                 y_pos[j][i][0] = self.inject_platform(y_pos[j][i][0], *pos_variation)
                 meta_pos.append(pos_variation)
 
+            # generating diverse negative samples
+            sampled_negatives = random.sample(negatives, num_negatives)
+
             # generate negative samples
             for j in range(num_negatives):
-                neg_variation = [
-                    m0[0] + np.random.uniform(NEG_RANGE, -TAU) \
-                        if np.random.random() > 0.5 else m0[0] + np.random.uniform(TAU, POS_RANGE),
-                    max(m0[1] + np.random.uniform(NEG_RANGE, -TAU) \
-                            if np.random.random() > 0.5 else m0[1] + np.random.uniform(TAU, POS_RANGE), 0),
-                    max(m0[2] + np.random.uniform(NEG_RANGE, -TAU) \
-                            if np.random.random() > 0.5 else m0[2] + np.random.uniform(TAU, POS_RANGE), 0)
-                ]
+                neg_variation = sampled_negatives[j]  # unique grid location
                 y_neg[j][i][0] = self.inject_platform(y_neg[j][i][0], *neg_variation)
                 meta_neg.append(neg_variation)
 
@@ -148,14 +158,14 @@ class Encoder(pl.LightningModule):
         c_y_pos = split_outputs[1:num_positives + 1]
         c_y_neg = split_outputs[num_positives + 1:]
 
-        loss_global = sum(self.info_loss(c_x, c_y_p, torch.cat([c_x] + list(c_y_neg), dim=0)) for c_y_p in c_y_pos)
+        loss_global = sum(self.info_loss(c_x, c_y_p, torch.cat([c_x] + list(c_y_neg), dim=0)) for c_y_p in c_y_pos) / (num_positives * num_negatives)
 
         ### Anomalies with far away hyperparameters should be far away propotional to delta.
         loss_local = sum(hard_negative_loss(c_x, c_y_p, torch.stack(c_y_neg), meta_pos[i], meta_neg) for i, c_y_p in
-                         enumerate(c_y_pos))
+                         enumerate(c_y_pos)) / (num_positives * num_negatives)
 
         ### Nomral should be close to each other, and far away from anomalies.
-        loss_normal = self.info_loss(c_x, c_x, torch.cat([torch.cat(c_y_pos, dim=0), torch.cat(c_y_neg, dim=0)], dim=0))
+        loss_normal = self.info_loss(c_x, c_x, torch.cat([torch.cat(c_y_pos, dim=0), torch.cat(c_y_neg, dim=0)], dim=0)) / num_negatives
 
         loss = loss_global + loss_local + loss_normal
         self.log("train_loss", loss, prog_bar=True)
@@ -167,7 +177,7 @@ class Encoder(pl.LightningModule):
         anomalies_start = random.choices([i for i in np.arange(0, 0.5, 0.01)], k=len(x))
 
         num_positives = 3
-        num_negatives = 10
+        num_negatives = len(negatives)
 
         y_pos = [x.clone() for _ in range(num_positives)]  # Multiple positive samples
         y_neg = [x.clone() for _ in range(num_negatives)]  # Multiple negative samples
@@ -191,16 +201,12 @@ class Encoder(pl.LightningModule):
                 y_pos[j][i][0] = self.inject_platform(y_pos[j][i][0], *pos_variation)
                 meta_pos.append(pos_variation)
 
-            # negative sample
+            # generating diverse negative samples
+            sampled_negatives = random.sample(negatives, num_negatives)
+
+            # generate negative samples
             for j in range(num_negatives):
-                neg_variation = [
-                    m0[0] + np.random.uniform(NEG_RANGE, -TAU) \
-                        if np.random.random() > 0.5 else m0[0] + np.random.uniform(TAU, POS_RANGE),
-                    max(m0[1] + np.random.uniform(NEG_RANGE, -TAU) \
-                            if np.random.random() > 0.5 else m0[1] + np.random.uniform(TAU, POS_RANGE), 0),
-                    max(m0[2] + np.random.uniform(NEG_RANGE, -TAU) \
-                            if np.random.random() > 0.5 else m0[2] + np.random.uniform(TAU, POS_RANGE), 0)
-                ]
+                neg_variation = sampled_negatives[j]  # unique grid location
                 y_neg[j][i][0] = self.inject_platform(y_neg[j][i][0], *neg_variation)
                 meta_neg.append(neg_variation)
 
@@ -220,13 +226,13 @@ class Encoder(pl.LightningModule):
         c_y_neg = split_outputs[num_positives + 1:num_positives + 1 + num_negatives]
         c_x_pos = split_outputs[-1]
 
-        loss_global = sum(self.info_loss(c_x, c_y_p, torch.cat([c_x] + list(c_y_neg), dim=0)) for c_y_p in c_y_pos)
+        loss_global = sum(self.info_loss(c_x, c_y_p, torch.cat([c_x] + list(c_y_neg), dim=0)) for c_y_p in c_y_pos) / (num_positives * num_negatives)
 
         loss_local = sum(hard_negative_loss(c_x, c_y_p, torch.stack(c_y_neg), meta_pos[i], meta_neg)
-                         for i, c_y_p in enumerate(c_y_pos))
+                         for i, c_y_p in enumerate(c_y_pos)) / (num_positives * num_negatives)
 
         loss_normal = self.info_loss(c_x, c_x_pos,
-                                     torch.cat([torch.cat(c_y_pos, dim=0), torch.cat(c_y_neg, dim=0)], dim=0))
+                                     torch.cat([torch.cat(c_y_pos, dim=0), torch.cat(c_y_neg, dim=0)], dim=0)) / (num_negatives)
 
         loss = loss_global + loss_local + loss_normal
         self.log("loss_global", loss_global, prog_bar=True)
