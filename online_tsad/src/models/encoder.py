@@ -27,7 +27,8 @@ step_size = 3
 sampled_levels = GRID_LEVEL[::step_size]
 sampled_lengths = GRID_LENGTH[::step_size]
 
-negatives = [(l, le) for l in sampled_levels for le in sampled_lengths]
+negatives = [(l, random.choice(np.arange(0, 0.5, 0.01)) + np.random.uniform(-TAU, TAU), le) 
+             for l in sampled_levels for le in sampled_lengths]
 print(f"Total negatives selected: {len(negatives)}")
 
 '''
