@@ -20,6 +20,8 @@ from sklearn.manifold import TSNE
 import matplotlib.cm as cm
 import random
 
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu') 
+
 
 class EmbNormalizer:
     def __init__(self, mode="tpsd"):
@@ -65,11 +67,13 @@ def inject_mean(ts_row, level, start, length):
 
 
 def train_classify_model(X_train, y_train):
+    X_train = X_train.to(device)
+    y_train = y_train.to(device)
     model = nn.Sequential(
         nn.Linear(128, 128),
         nn.ReLU(),
         nn.Linear(128, 512),
-    ).to('cuda:0')
+    ).to(device)
     criterion = nn.BCEWithLogitsLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
     for _ in range(1000):
@@ -82,6 +86,7 @@ def train_classify_model(X_train, y_train):
 
 
 def classify(model, X_valid):
+    X_valid = X_valid.to(device)
     y_pred = torch.where(torch.sigmoid(model(X_valid).detach()) > 0.5, 1, 0).cpu().numpy()
     return y_pred
 
@@ -91,7 +96,7 @@ def classify(model, X_valid):
 #         nn.Linear(128, 128),
 #         nn.ReLU(),
 #         nn.Linear(128, 512),
-#     ).to('cuda:0')
+#     ).to(device)
 #     criterion = nn.BCEWithLogitsLoss()
 #     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 #
@@ -283,6 +288,8 @@ def black_box_function(model, train_dataloader, val_dataloader, test_dataloader,
     valid_levels = np.round(np.arange(-1.0, 1.1, 0.1), 1)
     valid_lengths = np.round(np.arange(0.2, 0.52, 0.02), 2)
 
+    model = model.to(device)
+
     with torch.no_grad():
         z_train, x_train_np = [], []
         for x_batch in train_dataloader:
@@ -417,10 +424,10 @@ def black_box_function(model, train_dataloader, val_dataloader, test_dataloader,
                         X = np.concatenate([z_train_t.numpy(), z_train_aug_t_level[i].numpy()], axis=0)
                         y = np.concatenate(
                             [np.zeros((len(train_normal_index), x_train_np.shape[1])), train_labels_level[i]], axis=0)
-                        classify_model = train_classify_model(torch.tensor(X).float().to('cuda:0'),
-                                                              torch.tensor(y).float().to('cuda:0'))
+                        classify_model = train_classify_model(torch.tensor(X).float().to(device),
+                                                              torch.tensor(y).float().to(device))
                     X_valid = np.concatenate([z_valid_t, z_valid_aug_t_level[j]], axis=0)
-                    y_pred = classify(classify_model, torch.tensor(X_valid).float().to('cuda:0'))
+                    y_pred = classify(classify_model, torch.tensor(X_valid).float().to(device))
                     y_valid = np.concatenate(
                         [np.zeros((len(valid_normal_index), x_valid_np.shape[1])), valid_labels_level[j]], axis=0)
                     f1 = f1_score(y_valid.reshape(-1), y_pred.reshape(-1))
@@ -441,10 +448,10 @@ def black_box_function(model, train_dataloader, val_dataloader, test_dataloader,
                         X = np.concatenate([z_train_t.numpy(), z_train_aug_t_length[i].numpy()], axis=0)
                         y = np.concatenate(
                             [np.zeros((len(train_normal_index), x_train_np.shape[1])), train_labels_length[i]], axis=0)
-                        classify_model = train_classify_model(torch.tensor(X).float().to('cuda:0'),
-                                                              torch.tensor(y).float().to('cuda:0'))
+                        classify_model = train_classify_model(torch.tensor(X).float().to(device),
+                                                              torch.tensor(y).float().to(device))
                     X_valid = np.concatenate([z_valid_t, z_valid_aug_t_length[j]], axis=0)
-                    y_pred = classify(classify_model, torch.tensor(X_valid).float().to('cuda:0'))
+                    y_pred = classify(classify_model, torch.tensor(X_valid).float().to(device))
                     y_valid = np.concatenate(
                         [np.zeros((len(valid_normal_index), x_valid_np.shape[1])), valid_labels_length[j]], axis=0)
                     f1 = f1_score(y_valid.reshape(-1), y_pred.reshape(-1))
@@ -454,8 +461,8 @@ def black_box_function(model, train_dataloader, val_dataloader, test_dataloader,
             # z_test_t = emb.normalize(z_test)
             # X = np.concatenate([z_train_t.numpy(), z_aug_t.numpy()], axis=0)
             # y = np.concatenate([np.zeros((len(train_normal_index), x_train_np.shape[1])), labels], axis=0)
-            # y_pred = classify(torch.tensor(X).float().to('cuda:0'), torch.tensor(y).float().to('cuda:0'),
-            #                   z_test_t.to('cuda:0'))
+            # y_pred = classify(torch.tensor(X).float().to(device), torch.tensor(y).float().to(device),
+            #                   z_test_t.to(device))
             # f1score.append(f1_score(y_test.reshape(-1), y_pred.reshape(-1)))
 
             # X = np.concatenate([z_train_t.numpy(), torch.cat(z_train_aug_t_level, dim=0).numpy(),
@@ -464,10 +471,10 @@ def black_box_function(model, train_dataloader, val_dataloader, test_dataloader,
             #     [np.zeros((len(train_normal_index), x_train_np.shape[1])),
             #      np.concatenate(train_labels_level, axis=0),
             #      np.concatenate(train_labels_length, axis=0)], axis=0)
-            # y_pred = classify(torch.tensor(X).float().to('cuda:0'), torch.tensor(y).float().to('cuda:0'),
+            # y_pred = classify(torch.tensor(X).float().to(device), torch.tensor(y).float().to(device),
             #                   torch.tensor(np.concatenate([z_valid_t, np.concatenate(z_valid_aug_t_level, axis=0),
             #                                                np.concatenate(z_valid_aug_t_length, axis=0)],
-            #                                               axis=0)).float().to('cuda:0'))
+            #                                               axis=0)).float().to(device))
             # y_valid = np.concatenate(
             #     [np.zeros((len(valid_normal_index), x_valid_np.shape[1])), np.concatenate(valid_labels_level, axis=0),
             #      np.concatenate(valid_labels_length, axis=0)], axis=0)

@@ -31,6 +31,8 @@ negatives = [(l, random.choice(np.arange(0, 0.5, 0.01)) + np.random.uniform(-TAU
              for l in sampled_levels for le in sampled_lengths]
 print(f"Total negatives selected: {len(negatives)}")
 
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu') 
+
 '''
 math explanation - 21 points in GRID_LEVEL, 16 points in GRID_LENGTH, so there are 21 * 16 = 336 grid cells
 336 is too large and will make training too slow, so we randomly sample the grid into a few broad regions and pick negatives
@@ -104,18 +106,19 @@ class Encoder(pl.LightningModule):
         return ts_row
 
     def training_step(self, x, batch_idx):
+        x = x.to(device)
         if batch_idx not in self.normal_idx:
             self.normal_idx.add(batch_idx)
-            self.normal_x = torch.cat([self.normal_x, x], dim=0)
+            self.normal_x = torch.cat([self.normal_x, x], dim=0).to(device)
 
         # multiple positive samples
         num_positives = 3
-        y_pos = [x.clone() for _ in range(num_positives)]
+        y_pos = [x.clone().to(device) for _ in range(num_positives)]
         meta_pos = []
 
         # multiple negative samples
         num_negatives = len(negatives)
-        y_neg = [x.clone() for _ in range(num_negatives)]
+        y_neg = [x.clone().to(device) for _ in range(num_negatives)]
         meta_neg = []
 
         for i in range(len(x)):
@@ -144,7 +147,7 @@ class Encoder(pl.LightningModule):
                 meta_neg.append(neg_variation)
 
         # concatenating samples
-        all_samples = torch.cat([x] + y_pos + y_neg, dim=0)
+        all_samples = torch.cat([x] + y_pos + y_neg, dim=0).to(device)
         outputs = self(all_samples)
 
         # Validate sizes for splitting
@@ -173,15 +176,16 @@ class Encoder(pl.LightningModule):
         return loss
 
     def validation_step(self, x, batch_idx):
-        x_pos = self.normal_x[np.random.choice(len(self.normal_x), x.shape[0])]
+        x = x.to(device)
+        x_pos = self.normal_x[np.random.choice(len(self.normal_x), x.shape[0])].to(device)
 
         anomalies_start = random.choices([i for i in np.arange(0, 0.5, 0.01)], k=len(x))
 
         num_positives = 3
         num_negatives = len(negatives)
 
-        y_pos = [x.clone() for _ in range(num_positives)]  # Multiple positive samples
-        y_neg = [x.clone() for _ in range(num_negatives)]  # Multiple negative samples
+        y_pos = [x.clone().to(device) for _ in range(num_positives)]  # Multiple positive samples
+        y_neg = [x.clone().to(device) for _ in range(num_negatives)]  # Multiple negative samples
         meta_pos = []
         meta_neg = []
 
@@ -211,7 +215,7 @@ class Encoder(pl.LightningModule):
                 y_neg[j][i][0] = self.inject_platform(y_neg[j][i][0], *neg_variation)
                 meta_neg.append(neg_variation)
 
-        all_samples = torch.cat([x] + y_pos + y_neg + [x_pos], dim=0)
+        all_samples = torch.cat([x] + y_pos + y_neg + [x_pos], dim=0).to(device)
         outputs = self(all_samples)
 
         # Validate output sizes and split outputs
