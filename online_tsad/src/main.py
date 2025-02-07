@@ -38,6 +38,10 @@ if __name__ == "__main__":
     parser.add_argument("--ckpt_monitor", type=str, default='val_loss')
     parser.add_argument("--config_path", type=str, default='configs/default.yml')
     parser.add_argument("--strategy", type=str, default='auto')
+    # parser.add_argument("--trail", type=str, default='fixed')
+    # parser.add_argument("--trail", type=str, default='grid')
+    # parser.add_argument("--trail", type=str, default='wo_first')
+    # parser.add_argument("--trail", type=str, default='more_negative')
     parser.add_argument(
         "--test_mode", type=bool, default=False, action=argparse.BooleanOptionalAction
     )
@@ -81,7 +85,7 @@ if __name__ == "__main__":
     #     "level_0_h0" : 0.2, "level_0_h1" : 0.7,
     #     "length_1_h0": 0.2, "length_1_h1": 0.2,
     #     "level_1_h0" : 0.7, "level_1_h1" : 0.2,
-    # } 
+    # }
     best_point = {
         "ratio_anomaly": 0.1,  # Total ratio of anomalies (e.g., 10% of the data)
         "fixed_level": 0.5,  # Fixed level for the platform anomaly
@@ -91,15 +95,15 @@ if __name__ == "__main__":
 
     # num_iterations = 5
     # for iteration in range(num_iterations):
-    model = train_model(args, m_config, train_dataloader, trainval_dataloader, best_point)
-    wd, f1score = black_box_function(model, train_dataloader, val_dataloader, test_dataloader, best_point)
+    model = train_model(args, m_config, train_dataloader, trainval_dataloader, best_point, args.trail)
+    wd, f1score = black_box_function(model, train_dataloader, val_dataloader, test_dataloader, best_point, args.trail)
     # print(colored("Ground truth point:", 'blue'), best_point)
     # print(colored(f"Iteration {iteration + 1} - Target Value:", 'blue'), target)
     # print(colored(f"Iteration {iteration + 1} - F1-Score   :", 'blue'), f1score)
     print(colored(f"WD:", 'blue'), wd)
     print(colored(f"F1-Score:", 'blue'), f1score)
     print()
-    with open(f'logs/training/more_negative/wd_f1score.txt', 'w') as file:
+    with open(f'logs/training/{args.trail}/wd_f1score.txt', 'w') as file:
         file.write('wd: ' + str(wd))
         file.write("\n")
         file.write('f1score: ' + str(f1score))

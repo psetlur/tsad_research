@@ -3,13 +3,15 @@ import pandas as pd
 import numpy as np
 import ast
 
-trail = 'grid'
+trail = 'fixed'
+# trail = 'grid'
+# trail = 'wo_first'
 # trail = 'more_negative'
-skip = 100
+skip = 20
 
 
 def plot_loss_curve():
-    df = pd.read_csv(f'training/{trail}/metrics.csv').dropna(subset=["val_loss"])
+    df = pd.read_csv(f'logs/training/{trail}/metrics.csv').dropna(subset=["val_loss"])
     epoch = df["epoch"]
     plt.figure(figsize=(6, 4))
     plt.plot(epoch, df["loss_global"], marker="s", markersize=10, markerfacecolor='none', linestyle="-",
@@ -25,12 +27,12 @@ def plot_loss_curve():
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
     plt.legend()
-    plt.savefig(f'training/{trail}/loss_curve.pdf')
+    plt.savefig(f'logs/training/{trail}/loss_curve.pdf')
     plt.close()
 
 
 def plot_wd_f1score():
-    with open(f"training/{trail}/wd_f1score.txt", "r") as f:
+    with open(f"logs/training/{trail}/wd_f1score.txt", "r") as f:
         lines = f.readlines()
         wd = ast.literal_eval(lines[0][4:])
         f1score = ast.literal_eval(lines[1][9:])
@@ -83,7 +85,7 @@ def plot_wd_f1score():
         handles, labels = plt.gca().get_legend_handles_labels()
         by_label = dict(zip(labels, handles))
         plt.legend(by_label.values(), by_label.keys(), loc='upper left')
-        plt.savefig(f'training/{trail}/{config_name}_{title}.pdf')
+        plt.savefig(f'logs/training/{trail}/{config_name}_{title}.pdf')
         plt.show()
 
     plot_heatmap(data=level_wd, title='WD', config_name='level')
@@ -94,5 +96,5 @@ def plot_wd_f1score():
 
 
 if __name__ == "__main__":
-    # plot_loss_curve()
-    plot_wd_f1score()
+    plot_loss_curve()
+    # plot_wd_f1score()

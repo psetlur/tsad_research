@@ -20,8 +20,6 @@ from sklearn.manifold import TSNE
 import matplotlib.cm as cm
 import random
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
 
 class EmbNormalizer:
     def __init__(self, mode="tpsd"):
@@ -67,13 +65,11 @@ def inject_mean(ts_row, level, start, length):
 
 
 def train_classify_model(X_train, y_train):
-    X_train = X_train.to(device)
-    y_train = y_train.to(device)
     model = nn.Sequential(
         nn.Linear(128, 128),
         nn.ReLU(),
         nn.Linear(128, 512),
-    ).to(device)
+    ).to('cuda:0')
     criterion = nn.BCEWithLogitsLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
     for _ in range(1000):
@@ -86,7 +82,6 @@ def train_classify_model(X_train, y_train):
 
 
 def classify(model, X_valid):
-    X_valid = X_valid.to(device)
     y_pred = torch.where(torch.sigmoid(model(X_valid).detach()) > 0.5, 1, 0).cpu().numpy()
     return y_pred
 
@@ -96,7 +91,7 @@ def classify(model, X_valid):
 #         nn.Linear(128, 128),
 #         nn.ReLU(),
 #         nn.Linear(128, 512),
-#     ).to(device)
+#     ).to('cuda:0')
 #     criterion = nn.BCEWithLogitsLoss()
 #     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 #
@@ -280,7 +275,7 @@ def black_box_function(model, train_dataloader, val_dataloader, test_dataloader,
     # fixed_level = a_config['fixed_level']
     # fixed_length = a_config['fixed_length']
     # fixed_start = a_config['fixed_start']
-    ratio_anomaly = 0.5
+    ratio_anomaly = 0.1
     fixed_level = 0.5
     fixed_length = 0.3
     train_levels = np.round(np.arange(-1.0, 1.1, 0.1), 1)
@@ -338,8 +333,9 @@ def black_box_function(model, train_dataloader, val_dataloader, test_dataloader,
         for seed in range(n_trials):
             train_inlier_index, train_outlier_index = train_test_split(range(len(x_train_np)),
                                                                        train_size=1 - ratio_anomaly, random_state=seed)
-            valid_inlier_index, valid_outlier_index = train_test_split(range(len(x_valid_np)),
-                                                                       train_size=1 - ratio_anomaly, random_state=seed)
+
+            # valid_inlier_index, valid_outlier_index = train_test_split(range(len(x_valid_np)),
+            #                                                            train_size=1 - ratio_anomaly, random_state=seed)
 
             # test_index_0, test_index_1 = train_test_split(test_index, train_size=ratio_0/(ratio_0+ratio_1), random_state=seed)
 
@@ -351,10 +347,8 @@ def black_box_function(model, train_dataloader, val_dataloader, test_dataloader,
                         x = x_np[i]
                         if config_name == 'level':
                             xa, l = inject_platform(x, config, np.random.uniform(0, 0.5), fixed_length)
-                            # xa, l = inject_platform(x, config, 0.0, fixed_length)
                         elif config_name == 'length':
-                            # xa, l = inject_platform(x, fixed_level, np.random.uniform(0, 0.5), config)
-                            xa, l = inject_platform(x, fixed_level, 0.0, config)
+                            xa, l = inject_platform(x, fixed_level, np.random.uniform(0, 0.5), config)
                         else:
                             raise Exception('Unsupported config')
                         x_aug.append(xa)
@@ -459,14 +453,14 @@ def black_box_function(model, train_dataloader, val_dataloader, test_dataloader,
                       valid_augs=None, train_configs=train_levels, valid_configs=None,
                       config_name='level', fixed_config=f'fixed_length{fixed_length}', trail=trail, inlier=False,
                       test=False, converse=1)
-            visualize(train_inlier=z_train, valid_inlier=z_valid, train_augs=z_train_aug_level,
-                      valid_augs=None, train_configs=train_levels, valid_configs=None,
-                      config_name='level', fixed_config=f'fixed_length{fixed_length}', trail=trail, inlier=True,
-                      test=False, converse=-1)
-            visualize(train_inlier=None, valid_inlier=None, train_augs=z_train_aug_level,
-                      valid_augs=None, train_configs=train_levels, valid_configs=None,
-                      config_name='level', fixed_config=f'fixed_length{fixed_length}', trail=trail, inlier=False,
-                      test=False, converse=-1)
+            # visualize(train_inlier=z_train, valid_inlier=z_valid, train_augs=z_train_aug_level,
+            #           valid_augs=None, train_configs=train_levels, valid_configs=None,
+            #           config_name='level', fixed_config=f'fixed_length{fixed_length}', trail=trail, inlier=True,
+            #           test=False, converse=-1)
+            # visualize(train_inlier=None, valid_inlier=None, train_augs=z_train_aug_level,
+            #           valid_augs=None, train_configs=train_levels, valid_configs=None,
+            #           config_name='level', fixed_config=f'fixed_length{fixed_length}', trail=trail, inlier=False,
+            #           test=False, converse=-1)
 
     return total_loss, f1score
 
@@ -494,8 +488,10 @@ def visualize(train_inlier, valid_inlier, train_augs, valid_augs, train_configs,
                     xt[len(train_inlier):len(train_inlier) + len(valid_inlier), 1], c='g', alpha=0.5)
 
     # train outliers
-    # cmap = cm.get_cmap('Reds')
-    cmap = cm.get_cmap('tab20')
+    if inlier is True:
+        cmap = cm.get_cmap('Reds')
+    else:
+        cmap = cm.get_cmap('tab20')
     if len(train_configs) == 1:
         normalized_values = [0.5]
     else:

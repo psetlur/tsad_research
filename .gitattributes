@@ -1,6 +1,2 @@
 online_tsad/data/processed/physionet_2017/ filter=lfs diff=lfs merge=lfs -text
 *.bin filter=lfs diff=lfs merge=lfs -text
-\# filter=lfs diff=lfs merge=lfs -text
-例如，跟踪所有 filter=lfs diff=lfs merge=lfs -text
-.bin filter=lfs diff=lfs merge=lfs -text
-文件 filter=lfs diff=lfs merge=lfs -text

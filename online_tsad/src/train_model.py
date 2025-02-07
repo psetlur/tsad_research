@@ -4,20 +4,15 @@ from lightning.pytorch.loggers import CSVLogger
 from utils import setup_checkpoint, setup_logger_and_checkpoint
 from models import load_model
 from pytorch_lightning.callbacks import EarlyStopping
-import torch
 
 
-def train_model(args, m_config, train_dataloader, trainval_dataloader, a_config):
+def train_model(args, m_config, train_dataloader, trainval_dataloader, a_config, trail):
     path = "checkpoints/training/"
     model = load_model(m_config, a_config)
-
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu') 
-    model = model.to(device)
-
     if os.path.exists(path):
         ckpt = os.listdir(path)
         if len(ckpt) > 0:
-            return model.load_from_checkpoint(path + ckpt[0]).to(device)
+            return model.load_from_checkpoint(path + ckpt[0])
 
     if os.path.exists(path):
         for l in os.listdir(path):
@@ -34,12 +29,12 @@ def train_model(args, m_config, train_dataloader, trainval_dataloader, a_config)
             name="training",
             monitor=args.ckpt_monitor,
         )
-        logger = CSVLogger("logs", name="training", version='grid')
+        logger = CSVLogger("logs", name="training", version=trail)
 
     early_stop_callback = EarlyStopping(
         monitor="val_loss",
         mode="min",
-        patience=100
+        patience=20
     )
     trainer = pl.Trainer(
         strategy=args.strategy,
@@ -49,9 +44,7 @@ def train_model(args, m_config, train_dataloader, trainval_dataloader, a_config)
         logger=logger,
         num_sanity_val_steps=0,
         deterministic=True,
-        accelerator="gpu" if torch.cuda.is_available() else "cpu",
-        devices=1 if torch.cuda.is_available() else None,
     )
     trainer.fit(model, train_dataloader, trainval_dataloader)
-    model = model.load_from_checkpoint(ckpt_callback.best_model_path).to(device)
+    model = model.load_from_checkpoint(ckpt_callback.best_model_path)
     return model
