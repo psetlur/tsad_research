@@ -1,8 +1,6 @@
-.idea/
+.idea
 *__pycache__
-data/*
-!data/processed
+data
 logs
 checkpoints
-*.bak*
 test.py
