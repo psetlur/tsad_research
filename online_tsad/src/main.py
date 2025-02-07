@@ -2,7 +2,6 @@ import os
 import yaml
 import argparse
 import pandas as pd
-import numpy as np
 from termcolor import colored
 
 import torch
@@ -41,7 +40,9 @@ if __name__ == "__main__":
     # parser.add_argument("--trail", type=str, default='fixed')
     # parser.add_argument("--trail", type=str, default='grid')
     # parser.add_argument("--trail", type=str, default='wo_first')
-    # parser.add_argument("--trail", type=str, default='more_negative')
+    parser.add_argument("--trail", type=str, default='more_negative')
+    # parser.add_argument("--device", type=str, default='cpu')
+    parser.add_argument("--device", type=str, default='cuda:0')
     parser.add_argument(
         "--test_mode", type=bool, default=False, action=argparse.BooleanOptionalAction
     )
@@ -96,7 +97,7 @@ if __name__ == "__main__":
     # num_iterations = 5
     # for iteration in range(num_iterations):
     model = train_model(args, m_config, train_dataloader, trainval_dataloader, best_point, args.trail)
-    wd, f1score = black_box_function(model, train_dataloader, val_dataloader, test_dataloader, best_point, args.trail)
+    wd, f1score = black_box_function(args, model, train_dataloader, val_dataloader, test_dataloader, best_point, args.trail)
     # print(colored("Ground truth point:", 'blue'), best_point)
     # print(colored(f"Iteration {iteration + 1} - Target Value:", 'blue'), target)
     # print(colored(f"Iteration {iteration + 1} - F1-Score   :", 'blue'), f1score)

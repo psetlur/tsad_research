@@ -64,21 +64,21 @@ def inject_mean(ts_row, level, start, length):
     return ts_row, label
 
 
-def train_classify_model(X_train, y_train):
-    model = nn.Sequential(
-        nn.Linear(128, 128),
-        nn.ReLU(),
-        nn.Linear(128, 512),
-    ).to('cuda:0')
-    criterion = nn.BCEWithLogitsLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
-    for _ in range(1000):
-        out = model(X_train)
-        loss = criterion(out, y_train)
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-    return model
+# def train_classify_model(args, X_train, y_train):
+#     model = nn.Sequential(
+#         nn.Linear(128, 128),
+#         nn.ReLU(),
+#         nn.Linear(128, 512),
+#     ).to(args.device)
+#     criterion = nn.BCEWithLogitsLoss()
+#     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+#     for _ in range(1000):
+#         out = model(X_train)
+#         loss = criterion(out, y_train)
+#         optimizer.zero_grad()
+#         loss.backward()
+#         optimizer.step()
+#     return model
 
 
 def classify(model, X_valid):
@@ -91,7 +91,7 @@ def classify(model, X_valid):
 #         nn.Linear(128, 128),
 #         nn.ReLU(),
 #         nn.Linear(128, 512),
-#     ).to('cuda:0')
+#     ).to(args.device)
 #     criterion = nn.BCEWithLogitsLoss()
 #     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 #
@@ -268,7 +268,7 @@ def hist_sample(cdf, bins):
 #
 #     return total_loss, fscore
 
-def black_box_function(model, train_dataloader, val_dataloader, test_dataloader, a_config, trail):
+def black_box_function(args, model, train_dataloader, val_dataloader, test_dataloader, a_config, trail):
     n_trials = 1
     # ratio_0, ratio_1 = a_config['ratio_0'], a_config['ratio_1']
     # ratio_anomaly = a_config['ratio_anomaly']
@@ -384,13 +384,15 @@ def black_box_function(model, train_dataloader, val_dataloader, test_dataloader,
                 x_aug.append(xa)
                 labels.append(l)
 
-            z_train_aug_level = [model(torch.tensor(np.array(x_aug_level)).float().unsqueeze(1).to('cuda:0')).detach()
-                                 for x_aug_level in train_x_aug_level]
-            # z_train_aug_length = [model(torch.tensor(np.array(x_aug_length)).float().unsqueeze(1).to('cuda:0')).detach()
+            z_train_aug_level = [
+                model(torch.tensor(np.array(x_aug_level)).float().unsqueeze(1).to(args.device)).detach() for x_aug_level
+                in train_x_aug_level]
+
+            # z_train_aug_length = [model(torch.tensor(np.array(x_aug_length)).float().unsqueeze(1).to(args.device)).detach()
             #                       for x_aug_length in train_x_aug_length]
-            # z_valid_aug_level = [model(torch.tensor(np.array(x_aug_level)).float().unsqueeze(1).to('cuda:0')).detach()
+            # z_valid_aug_level = [model(torch.tensor(np.array(x_aug_level)).float().unsqueeze(1).to(args.device)).detach()
             #                      for x_aug_level in valid_x_aug_level]
-            # z_valid_aug_length = [model(torch.tensor(np.array(x_aug_length)).float().unsqueeze(1).to('cuda:0')).detach()
+            # z_valid_aug_length = [model(torch.tensor(np.array(x_aug_length)).float().unsqueeze(1).to(args.device)).detach()
             #                       for x_aug_length in valid_x_aug_length]
             #
             # z_aug = model(torch.tensor(np.array(x_aug)).float().unsqueeze(1).to(0)).detach().cpu()
@@ -414,8 +416,8 @@ def black_box_function(model, train_dataloader, val_dataloader, test_dataloader,
             # z_test_t = emb.normalize(z_test)
             # X = np.concatenate([z_train_t.numpy(), z_aug_t.numpy()], axis=0)
             # y = np.concatenate([np.zeros((len(train_inlier_index), x_train_np.shape[1])), labels], axis=0)
-            # y_pred = classify(torch.tensor(X).float().to('cuda:0'), torch.tensor(y).float().to('cuda:0'),
-            #                   z_test_t.to('cuda:0'))
+            # y_pred = classify(torch.tensor(X).float().to(args.device), torch.tensor(y).float().to(args.device),
+            #                   z_test_t.to(args.device))
             # f1score.append(f1_score(y_test.reshape(-1), y_pred.reshape(-1)))
 
             # visualize(train_inlier=z_train, valid_inlier=z_valid, train_augs=z_train_aug_level,

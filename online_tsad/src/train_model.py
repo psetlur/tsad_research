@@ -2,13 +2,13 @@ import os
 import pytorch_lightning as pl
 from lightning.pytorch.loggers import CSVLogger
 from utils import setup_checkpoint, setup_logger_and_checkpoint
-from models import load_model
 from pytorch_lightning.callbacks import EarlyStopping
+from models.encoder import Encoder
 
 
 def train_model(args, m_config, train_dataloader, trainval_dataloader, a_config, trail):
     path = "checkpoints/training/"
-    model = load_model(m_config, a_config)
+    model = Encoder(args=args, ts_input_size=m_config.get("ts_input_size"), lr=m_config.get("lr"), a_config=a_config)
     if os.path.exists(path):
         ckpt = os.listdir(path)
         if len(ckpt) > 0:
@@ -37,6 +37,8 @@ def train_model(args, m_config, train_dataloader, trainval_dataloader, a_config,
         patience=20
     )
     trainer = pl.Trainer(
+        accelerator="auto",
+        devices='auto',
         strategy=args.strategy,
         max_epochs=m_config["epochs"],
         callbacks=[ckpt_callback, early_stop_callback],
