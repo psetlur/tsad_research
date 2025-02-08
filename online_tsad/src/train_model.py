@@ -6,7 +6,7 @@ from pytorch_lightning.callbacks import EarlyStopping
 from models.encoder import Encoder
 
 
-def train_model(args, m_config, train_dataloader, trainval_dataloader, a_config, trail):
+def train_model(args, m_config, train_dataloader, trainval_dataloader, a_config):
     path = "checkpoints/training/"
     model = Encoder(args=args, ts_input_size=m_config.get("ts_input_size"), lr=m_config.get("lr"), a_config=a_config)
     if os.path.exists(path):
@@ -29,7 +29,7 @@ def train_model(args, m_config, train_dataloader, trainval_dataloader, a_config,
             name="training",
             monitor=args.ckpt_monitor,
         )
-        logger = CSVLogger("logs", name="training", version=trail)
+        logger = CSVLogger("logs", name="training", version=args.trail)
 
     early_stop_callback = EarlyStopping(
         monitor="val_loss",

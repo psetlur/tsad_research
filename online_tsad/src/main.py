@@ -38,9 +38,12 @@ if __name__ == "__main__":
     parser.add_argument("--config_path", type=str, default='configs/default.yml')
     parser.add_argument("--strategy", type=str, default='auto')
     # parser.add_argument("--trail", type=str, default='fixed')
+    parser.add_argument("--trail", type=str, default='length_tau')
     # parser.add_argument("--trail", type=str, default='grid')
     # parser.add_argument("--trail", type=str, default='wo_first')
-    parser.add_argument("--trail", type=str, default='more_negative')
+    # parser.add_argument("--trail", type=str, default='more_epochs')
+    # parser.add_argument("--trail", type=str, default='more_negative')
+    # parser.add_argument("--trail", type=str, default='warmup')
     # parser.add_argument("--device", type=str, default='cpu')
     parser.add_argument("--device", type=str, default='cuda:0')
     parser.add_argument(
@@ -96,8 +99,8 @@ if __name__ == "__main__":
 
     # num_iterations = 5
     # for iteration in range(num_iterations):
-    model = train_model(args, m_config, train_dataloader, trainval_dataloader, best_point, args.trail)
-    wd, f1score = black_box_function(args, model, train_dataloader, val_dataloader, test_dataloader, best_point, args.trail)
+    model = train_model(args, m_config, train_dataloader, trainval_dataloader, best_point)
+    wd, f1score = black_box_function(args, model, train_dataloader, val_dataloader, test_dataloader, best_point)
     # print(colored("Ground truth point:", 'blue'), best_point)
     # print(colored(f"Iteration {iteration + 1} - Target Value:", 'blue'), target)
     # print(colored(f"Iteration {iteration + 1} - F1-Score   :", 'blue'), f1score)
