@@ -22,10 +22,11 @@ if __name__ == "__main__":
         print("Device name:", torch.cuda.get_device_name(0))
     else:
         print("No GPU available, using the CPU instead.")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # set seed
     pl.seed_everything(0)
-    torch.backends.cudnn.determinstic = True
+    torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
     torch.set_float32_matmul_precision("high")
 
@@ -45,7 +46,7 @@ if __name__ == "__main__":
     # parser.add_argument("--trail", type=str, default='more_negative')
     # parser.add_argument("--trail", type=str, default='warmup')
     # parser.add_argument("--device", type=str, default='cpu')
-    parser.add_argument("--device", type=str, default='cuda:0')
+    parser.add_argument("--device", type=str, default=device)
     parser.add_argument(
         "--test_mode", type=bool, default=False, action=argparse.BooleanOptionalAction
     )
