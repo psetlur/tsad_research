@@ -245,17 +245,29 @@ class Encoder(pl.LightningModule):
         c_y_neg = split_outputs[num_positives + 1:num_positives + 1 + num_negatives]
         c_x_pos = split_outputs[-1]
 
+        if self.current_epoch < 30:
+            weight_normal = 1.0
+            weight_global = 0.01
+            weight_local = 0.001
+        elif self.current_epoch < 60:
+            weight_normal = 1.0
+            weight_global = 1.0
+            weight_local = 0.01
+        else:
+            weight_normal = 1.0
+            weight_global = 1.0
+            weight_local = 1.0
+
+
         loss_global = sum(self.info_loss(c_x, c_y_p, torch.cat([c_x] + list(c_y_neg), dim=0)) for c_y_p in c_y_pos) / len(c_y_pos)
 
-        if self.current_epoch < 50:
-            loss_local = 0
-        else:
-            loss_local = sum(hard_negative_loss(c_x, c_y_p, torch.stack(c_y_neg), meta_pos[i], meta_neg)
+        loss_local = sum(hard_negative_loss(c_x, c_y_p, torch.stack(c_y_neg), meta_pos[i], meta_neg)
                              for i, c_y_p in enumerate(c_y_pos)) / len(c_y_pos)
 
         loss_normal = self.info_loss(c_x, c_x_pos,
                                      torch.cat([torch.cat(c_y_pos, dim=0), torch.cat(c_y_neg, dim=0)], dim=0)) 
-        loss = loss_global + loss_local + loss_normal
+        
+        loss = weight_global * loss_global + weight_local * loss_local + weight_normal * loss_normal
         self.log("loss_global", loss_global, prog_bar=True)
         self.log("loss_local", loss_local, prog_bar=True)
         self.log("loss_normal", loss_normal, prog_bar=True)
