@@ -87,7 +87,7 @@ class Encoder(pl.LightningModule):
         self.info_loss = InfoNCE(negative_mode='unpaired')
 
         self.normal_idx = set()
-        self.normal_x = torch.tensor([]).to(0)
+        self.normal_x = torch.tensor([]).to(device)
 
     def forward(self, x):
         x = self.encoder(x)
