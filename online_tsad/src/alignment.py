@@ -20,6 +20,7 @@ import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
 import matplotlib.cm as cm
 import random
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 class EmbNormalizer:
@@ -70,7 +71,7 @@ def train_classify_model(args, X_train, y_train):
         nn.Linear(128, 128),
         nn.ReLU(),
         nn.Linear(128, 512),
-    ).to(args.device)
+    ).to(device)
     criterion = nn.BCEWithLogitsLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
     for _ in range(1000):
@@ -223,19 +224,19 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
                 labels.append(l)
 
             z_train_level_aug = [
-                model(torch.tensor(np.array(level_x_aug)).float().unsqueeze(1).to(args.device)).detach() for level_x_aug
+                model(torch.tensor(np.array(level_x_aug)).float().unsqueeze(1).to(device)).detach() for level_x_aug
                 in x_train_level_aug]
             z_train_length_aug = [
-                model(torch.tensor(np.array(length_x_aug)).float().unsqueeze(1).to(args.device)).detach() for
+                model(torch.tensor(np.array(length_x_aug)).float().unsqueeze(1).to(device)).detach() for
                 length_x_aug in x_train_length_aug]
             z_valid_level_aug = [
-                model(torch.tensor(np.array(level_x_aug)).float().unsqueeze(1).to(args.device)).detach() for level_x_aug
+                model(torch.tensor(np.array(level_x_aug)).float().unsqueeze(1).to(device)).detach() for level_x_aug
                 in x_valid_level_aug]
             z_valid_length_aug = [
-                model(torch.tensor(np.array(length_x_aug)).float().unsqueeze(1).to(args.device)).detach() for
+                model(torch.tensor(np.array(length_x_aug)).float().unsqueeze(1).to(device)).detach() for
                 length_x_aug in x_valid_length_aug]
 
-            z_aug = model(torch.tensor(np.array(x_aug)).float().unsqueeze(1).to(args.device)).detach()
+            z_aug = model(torch.tensor(np.array(x_aug)).float().unsqueeze(1).to(device)).detach()
             z_train_t, z_valid_t, z_aug_t = emb(z_train[train_inlier_index].clone().squeeze(),
                                                 z_valid[valid_inlier_index].clone().squeeze(),
                                                 z_aug.clone().squeeze())
@@ -267,10 +268,10 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
                     X = torch.cat([z_train_t, z_train_level_aug_t[i]], dim=0)
                     y = torch.tensor(np.concatenate(
                         [np.zeros((len(train_inlier_index), x_train_np.shape[1])), train_level_labels[i]],
-                        axis=0)).to(args.device)
+                        axis=0)).to(device)
                     if classify_model is None:
                         classify_model = train_classify_model(args=args, X_train=X, y_train=y)
-                    y_pred = classify(model=classify_model, X_valid=z_valid_level_aug_t[j].to(args.device))
+                    y_pred = classify(model=classify_model, X_valid=z_valid_level_aug_t[j].to(device))
                     f1 = f1_score(torch.tensor(valid_level_labels[j]).reshape(-1), y_pred.reshape(-1))
                     f1score['level'][train_level][valid_level] = f1
 
@@ -289,10 +290,10 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
                     X = torch.cat([z_train_t, z_train_length_aug_t[i]], dim=0)
                     y = torch.tensor(np.concatenate(
                         [np.zeros((len(train_inlier_index), x_train_np.shape[1])), train_length_labels[i]],
-                        axis=0)).to(args.device)
+                        axis=0)).to(device)
                     if classify_model is None:
                         classify_model = train_classify_model(args=args, X_train=X, y_train=y)
-                    y_pred = classify(model=classify_model, X_valid=z_valid_length_aug_t[j].to(args.device))
+                    y_pred = classify(model=classify_model, X_valid=z_valid_length_aug_t[j].to(device))
                     f1 = f1_score(torch.tensor(valid_length_labels[j]).reshape(-1), y_pred.reshape(-1))
                     f1score['length'][train_length][valid_length] = f1
 

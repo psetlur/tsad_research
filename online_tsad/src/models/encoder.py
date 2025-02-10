@@ -46,8 +46,8 @@ def hist_sample(cdf, bins):
 
 
 def hard_negative_loss(z_anc, z_pos, z_neg, meta_anc, meta_neg, temperature=0.1):
-    meta_anc = torch.tensor(meta_anc).to(z_anc.device)
-    meta_neg = torch.tensor(meta_neg).to(z_anc.device)
+    meta_anc = torch.tensor(meta_anc).to(device)
+    meta_neg = torch.tensor(meta_neg).to(device)
 
     if meta_anc.dim() == 1:
         meta_anc = meta_anc.unsqueeze(0)
