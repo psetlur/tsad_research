@@ -4,6 +4,9 @@ from lightning.pytorch.loggers import CSVLogger
 from utils import setup_checkpoint, setup_logger_and_checkpoint
 from pytorch_lightning.callbacks import EarlyStopping
 from models.encoder import Encoder
+import torch
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 def train_model(args, m_config, train_dataloader, trainval_dataloader, a_config):
@@ -37,8 +40,7 @@ def train_model(args, m_config, train_dataloader, trainval_dataloader, a_config)
         patience=20
     )
     trainer = pl.Trainer(
-        accelerator="auto",
-        devices='auto',
+        devices=device,
         strategy=args.strategy,
         max_epochs=m_config["epochs"],
         callbacks=[ckpt_callback, early_stop_callback],
