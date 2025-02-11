@@ -120,61 +120,61 @@ class Encoder(pl.LightningModule):
 
     def training_step(self, x, batch_idx):
         x = x.to(device)
-        self.normal_x.to(device)
+        self.normal_x = self.normal_x.to(device)
         if batch_idx not in self.normal_idx:
             self.normal_idx.add(batch_idx)
             self.normal_x = torch.cat([self.normal_x, x], dim=0).to(device)
+        x_pos = self.normal_x[np.random.choice(len(self.normal_x), x.shape[0])]
+
+        anomalies_start = random.choices([i for i in np.arange(0, 0.5, 0.01)], k=len(x))
 
         # multiple positive samples
         num_positives = 3
         y_pos = [x.clone().to(device) for _ in range(num_positives)]
-        meta_pos = []
+        meta_pos = [[] for _ in range(num_positives)]
 
         # multiple negative samples
         num_negatives = len(negatives)
         y_neg = [x.clone().to(device) for _ in range(num_negatives)]
-        meta_neg = []
+        meta_neg = [[] for _ in range(num_negatives)]
 
         for i in range(len(x)):
             # First platform anomaly - original
-            m0 = [config_from_grid(CDF_LEVEL, GRID_LEVEL),
-                  random.choice(np.arange(0, 0.5, 0.01)),
+            m0 = [config_from_grid(CDF_LEVEL, GRID_LEVEL), anomalies_start[i],
                   config_from_grid(CDF_LENGTH, GRID_LENGTH)]
+            
+            y_0 = x.clone()
+            y_0[i][0] = self.inject_platform(y_0[i][0], *m0)
 
             # generate positive samples
             for j in range(num_positives):
-                pos_variation = [
-                    m0[0] + np.random.uniform(-TAU, TAU),
-                    max(m0[1] + np.random.uniform(-TAU, TAU), 0),
-                    max(m0[2] + np.random.uniform(-TAU, TAU), 0)
-                ]
-                y_pos[j][i][0] = self.inject_platform(y_pos[j][i][0], *pos_variation)
-                meta_pos.append(pos_variation)
+                s0 = m0[0] + np.random.uniform(-TAU, TAU)
+                s1 = max(m0[1] + np.random.uniform(-TAU, TAU), 0)
+                s2 = max(m0[2] + np.random.uniform(-TAU, TAU), 0)
+                y_pos[j][i][0] = self.inject_platform(y_pos[j][i][0], s0, s1, s2)
+                meta_pos[j].append([s0, s1, s2])
 
             # generating diverse negative samples
             sampled_negatives = random.sample(negatives, num_negatives)
-
-            # generate negative samples
             for j in range(num_negatives):
-                neg_variation = sampled_negatives[j]  # unique grid location
-                y_neg[j][i][0] = self.inject_platform(y_neg[j][i][0], *neg_variation)
-                meta_neg.append(neg_variation)
+                s_neg = sampled_negatives[j]
+                y_neg[j][i][0] = self.inject_platform(y_neg[j][i][0], *s_neg)
+                meta_neg[j].append(s_neg)
 
         # concatenating samples
-        all_samples = torch.cat([x] + y_pos + y_neg, dim=0).to(device)
+        all_samples = torch.cat([x, y_0] + y_pos + y_neg + [x_pos], dim=0).to(device)
         outputs = self(all_samples)
 
         # Validate sizes for splitting
-        total_expected_size = x.shape[0] * (1 + num_positives + num_negatives)
-        if outputs.shape[0] != total_expected_size:
-            raise ValueError(f"Mismatch in tensor size. Expected {total_expected_size}, but got {outputs.shape[0]}.")
-
-        split_sizes = [x.shape[0]] + [x.shape[0]] * num_positives + [x.shape[0]] * num_negatives
+        split_sizes = [x.shape[0]] * (2 + num_positives + num_negatives)
         split_outputs = torch.split(outputs, split_sizes, dim=0)
 
         c_x = split_outputs[0]
-        c_y_pos = split_outputs[1:num_positives + 1]
-        c_y_neg = split_outputs[num_positives + 1:]
+        c_y_0 = split_outputs[1]
+        c_y_pos = split_outputs[2:2 + num_positives]
+        c_y_neg = split_outputs[2 + num_positives:-1]
+        c_x_pos = split_outputs[-1]
+
 
         if self.current_epoch < 30:
             weight_normal = 1.0
@@ -189,15 +189,14 @@ class Encoder(pl.LightningModule):
             weight_global = 1.0
             weight_local = 1.0
 
-        loss_global = sum(self.info_loss(c_x, c_y_p, torch.cat([c_x] + list(c_y_neg), dim=0)) for c_y_p in c_y_pos) / len(c_y_pos)
+        loss_global = sum(self.info_loss(c_y_0, c_y_p, torch.cat([c_x, c_x_pos], dim=0)) for c_y_p in c_y_pos) / len(c_y_pos)
         
         ### Anomalies with far away hyperparameters should be far away propotional to delta.
-        loss_local = sum(hard_negative_loss(c_x, c_y_p, torch.stack(c_y_neg), meta_pos[i], meta_neg) for i, c_y_p in
-                             enumerate(c_y_pos)) / len(c_y_pos)
+        loss_local = sum(hard_negative_loss(c_y_0, c_y_p, torch.stack(c_y_neg), meta_pos[i], meta_neg) 
+                         for i, c_y_p in enumerate(c_y_pos)) / len(c_y_pos)
 
         ### Nomral should be close to each other, and far away from anomalies.
-        loss_normal = self.info_loss(c_x, c_x, torch.cat([torch.cat(c_y_pos, dim=0), torch.cat(c_y_neg, dim=0)],
-                                                         dim=0)) 
+        loss_normal = self.info_loss(c_x, c_x_pos, torch.cat([torch.cat(c_y_pos, dim=0), torch.cat(c_y_neg, dim=0)], dim=0)) 
 
         loss = weight_global * loss_global + weight_local * loss_local + weight_normal * loss_normal
         self.log("train_loss", loss, prog_bar=True)
@@ -214,8 +213,8 @@ class Encoder(pl.LightningModule):
 
         y_pos = [x.clone().to(device) for _ in range(num_positives)]  # Multiple positive samples
         y_neg = [x.clone().to(device) for _ in range(num_negatives)]  # Multiple negative samples
-        meta_pos = []
-        meta_neg = []
+        meta_pos = [[] for _ in range(num_positives)]
+        meta_neg = [[] for _ in range(num_negatives)]
 
         for i in range(len(x)):
             ### Platform anomaly
@@ -232,7 +231,7 @@ class Encoder(pl.LightningModule):
                     max(m0[2] + np.random.uniform(-TAU, TAU), 0)
                 ]
                 y_pos[j][i][0] = self.inject_platform(y_pos[j][i][0], *pos_variation)
-                meta_pos.append(pos_variation)
+                meta_pos[j].append(pos_variation)
 
             # generating diverse negative samples
             sampled_negatives = random.sample(negatives, num_negatives)
@@ -241,47 +240,35 @@ class Encoder(pl.LightningModule):
             for j in range(num_negatives):
                 neg_variation = sampled_negatives[j]  # unique grid location
                 y_neg[j][i][0] = self.inject_platform(y_neg[j][i][0], *neg_variation)
-                meta_neg.append(neg_variation)
+                meta_neg[j].append(neg_variation)
 
-        all_samples = torch.cat([x] + y_pos + y_neg + [x_pos], dim=0).to(device)
+        all_samples = torch.cat([x, y_0] + y_pos + y_neg + [x_pos], dim=0).to(device)
         outputs = self(all_samples)
 
         # Validate output sizes and split outputs
-        total_expected_size = x.shape[0] * (1 + num_positives + num_negatives + 1)
+        total_expected_size = x.shape[0] * (2 + num_positives + num_negatives)
         if outputs.shape[0] != total_expected_size:
             raise ValueError(f"Mismatch in tensor size. Expected {total_expected_size}, but got {outputs.shape[0]}.")
 
-        split_sizes = [x.shape[0]] + [x.shape[0]] * num_positives + [x.shape[0]] * num_negatives + [x.shape[0]]
+        split_sizes = [x.shape[0]] * (2 + num_positives + num_negatives)
         split_outputs = torch.split(outputs, split_sizes, dim=0)
 
         c_x = split_outputs[0]
-        c_y_pos = split_outputs[1:num_positives + 1]
-        c_y_neg = split_outputs[num_positives + 1:num_positives + 1 + num_negatives]
+        c_y_0 = split_outputs[1]
+        c_y_pos = split_outputs[2:2 + num_positives]
+        c_y_neg = split_outputs[2 + num_positives:]
         c_x_pos = split_outputs[-1]
 
-        if self.current_epoch < 30:
-            weight_normal = 1.0
-            weight_global = 0.01
-            weight_local = 0.001
-        elif self.current_epoch < 60:
-            weight_normal = 1.0
-            weight_global = 1.0
-            weight_local = 0.01
-        else:
-            weight_normal = 1.0
-            weight_global = 1.0
-            weight_local = 1.0
 
+        loss_global = sum(self.info_loss(c_y_0, c_y_p, torch.cat([c_x, c_x_pos], dim=0)) for c_y_p in c_y_pos) / len(c_y_pos)
 
-        loss_global = sum(self.info_loss(c_x, c_y_p, torch.cat([c_x] + list(c_y_neg), dim=0)) for c_y_p in c_y_pos) / len(c_y_pos)
-
-        loss_local = sum(hard_negative_loss(c_x, c_y_p, torch.stack(c_y_neg), meta_pos[i], meta_neg)
+        loss_local = sum(hard_negative_loss(c_y_0, c_y_p, torch.stack(c_y_neg), meta_pos[i], meta_neg) 
                              for i, c_y_p in enumerate(c_y_pos)) / len(c_y_pos)
 
         loss_normal = self.info_loss(c_x, c_x_pos,
                                      torch.cat([torch.cat(c_y_pos, dim=0), torch.cat(c_y_neg, dim=0)], dim=0)) 
         
-        loss = weight_global * loss_global + weight_local * loss_local + weight_normal * loss_normal
+        loss = loss_global + loss_local + loss_normal
         self.log("loss_global", loss_global, prog_bar=True)
         self.log("loss_local", loss_local, prog_bar=True)
         self.log("loss_normal", loss_normal, prog_bar=True)
