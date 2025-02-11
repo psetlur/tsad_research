@@ -189,7 +189,7 @@ class Encoder(pl.LightningModule):
             weight_global = 1.0
             weight_local = 1.0
 
-        loss_global = sum(self.info_loss(c_x, c_y_p, torch.cat([c_x] + c_y_neg, dim=0)) for c_y_p in c_y_pos) / len(c_y_pos)
+        loss_global = sum(self.info_loss(c_x, c_y_p, torch.cat([c_x] + list(c_y_neg), dim=0)) for c_y_p in c_y_pos) / len(c_y_pos)
         
         ### Anomalies with far away hyperparameters should be far away propotional to delta.
         loss_local = sum(hard_negative_loss(c_x, c_y_p, torch.stack(c_y_neg), meta_pos[i], meta_neg[i]) 
@@ -258,7 +258,7 @@ class Encoder(pl.LightningModule):
         c_y_neg = split_outputs[num_positives + 1:num_positives + 1 + num_negatives]
         c_x_pos = split_outputs[-1]
 
-        loss_global = sum(self.info_loss(c_x, c_y_p, torch.cat([c_x] + c_y_neg, dim=0)) for c_y_p in c_y_pos) / len(c_y_pos)
+        loss_global = sum(self.info_loss(c_x, c_y_p, torch.cat([c_x] + list(c_y_neg), dim=0)) for c_y_p in c_y_pos) / len(c_y_pos)
 
         loss_local = sum(hard_negative_loss(c_x, c_y_p, torch.stack(c_y_neg), meta_pos[i], meta_neg[i])
                      for i, c_y_p in enumerate(c_y_pos)) / len(c_y_pos)
