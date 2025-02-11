@@ -166,7 +166,7 @@ class Encoder(pl.LightningModule):
         outputs = self(all_samples)
 
         # Validate sizes for splitting
-        split_sizes = [x.shape[0]] * (2 + num_positives + num_negatives)
+        split_sizes = [x.shape[0], y_0.shape[0]] + [y.shape[0] for y in y_pos] + [y.shape[0] for y in y_neg] + [x_pos.shape[0]]
         split_outputs = torch.split(outputs, split_sizes, dim=0)
 
         c_x = split_outputs[0]
@@ -250,7 +250,7 @@ class Encoder(pl.LightningModule):
         if outputs.shape[0] != total_expected_size:
             raise ValueError(f"Mismatch in tensor size. Expected {total_expected_size}, but got {outputs.shape[0]}.")
 
-        split_sizes = [x.shape[0]] * (2 + num_positives + num_negatives)
+        split_sizes = [x.shape[0], y_0.shape[0]] + [y.shape[0] for y in y_pos] + [y.shape[0] for y in y_neg] + [x_pos.shape[0]]
         split_outputs = torch.split(outputs, split_sizes, dim=0)
 
         c_x = split_outputs[0]
