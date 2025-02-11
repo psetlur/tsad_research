@@ -20,7 +20,6 @@ import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
 import matplotlib.cm as cm
 import random
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 class EmbNormalizer:
@@ -71,7 +70,7 @@ def train_classify_model(args, X_train, y_train):
         nn.Linear(128, 128),
         nn.ReLU(),
         nn.Linear(128, 512),
-    ).to(device)
+    ).to(args.device)
     criterion = nn.BCEWithLogitsLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
     for _ in range(1000):
@@ -182,22 +181,21 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
             # test_index_0, test_index_1 = train_test_split(test_index, train_size=ratio_0/(ratio_0+ratio_1), random_state=seed)
 
             def inject(x_np, configs, outlier_index, config_name):
-                x_configs_aug, configs_labels = [], []
+                x_configs_augs, configs_labels = list(), list()
                 for config in configs:
-                    x_aug, labels = [], []
+                    x_augs, labels = list(), list()
                     for i in outlier_index:
-                        x = x_np[i]
                         if config_name == 'level':
-                            xa, l = inject_platform(x, config, np.random.uniform(0, 0.5), fixed_length)
+                            x_aug, label = inject_platform(x_np[i], config, np.random.uniform(0, 0.5), fixed_length)
                         elif config_name == 'length':
-                            xa, l = inject_platform(x, fixed_level, np.random.uniform(0, 0.5), config)
+                            x_aug, label = inject_platform(x_np[i], fixed_level, np.random.uniform(0, 0.5), config)
                         else:
                             raise Exception('Unsupported config')
-                        x_aug.append(xa)
-                        labels.append(l)
-                    x_configs_aug.append(x_aug)
+                        x_augs.append(x_aug)
+                        labels.append(label)
+                    x_configs_augs.append(x_augs)
                     configs_labels.append(labels)
-                return x_configs_aug, configs_labels
+                return x_configs_augs, configs_labels
 
             # train level aug
             x_train_level_aug, train_level_labels = inject(x_np=x_train_np, configs=train_levels,
@@ -224,19 +222,19 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
                 labels.append(l)
 
             z_train_level_aug = [
-                model(torch.tensor(np.array(level_x_aug)).float().unsqueeze(1).to(device)).detach() for level_x_aug
-                in x_train_level_aug]
+                model(torch.tensor(np.array(level_x_aug)).float().unsqueeze(1).to(args.device)).detach() for
+                level_x_aug in x_train_level_aug]
             z_train_length_aug = [
-                model(torch.tensor(np.array(length_x_aug)).float().unsqueeze(1).to(device)).detach() for
+                model(torch.tensor(np.array(length_x_aug)).float().unsqueeze(1).to(args.device)).detach() for
                 length_x_aug in x_train_length_aug]
             z_valid_level_aug = [
-                model(torch.tensor(np.array(level_x_aug)).float().unsqueeze(1).to(device)).detach() for level_x_aug
-                in x_valid_level_aug]
+                model(torch.tensor(np.array(level_x_aug)).float().unsqueeze(1).to(args.device)).detach() for
+                level_x_aug in x_valid_level_aug]
             z_valid_length_aug = [
-                model(torch.tensor(np.array(length_x_aug)).float().unsqueeze(1).to(device)).detach() for
+                model(torch.tensor(np.array(length_x_aug)).float().unsqueeze(1).to(args.device)).detach() for
                 length_x_aug in x_valid_length_aug]
 
-            z_aug = model(torch.tensor(np.array(x_aug)).float().unsqueeze(1).to(device)).detach()
+            z_aug = model(torch.tensor(np.array(x_aug)).float().unsqueeze(1).to(args.device)).detach()
             z_train_t, z_valid_t, z_aug_t = emb(z_train[train_inlier_index].clone().squeeze(),
                                                 z_valid[valid_inlier_index].clone().squeeze(),
                                                 z_aug.clone().squeeze())
@@ -268,10 +266,10 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
                     X = torch.cat([z_train_t, z_train_level_aug_t[i]], dim=0)
                     y = torch.tensor(np.concatenate(
                         [np.zeros((len(train_inlier_index), x_train_np.shape[1])), train_level_labels[i]],
-                        axis=0)).to(device)
+                        axis=0)).to(args.device)
                     if classify_model is None:
                         classify_model = train_classify_model(args=args, X_train=X, y_train=y)
-                    y_pred = classify(model=classify_model, X_valid=z_valid_level_aug_t[j].to(device))
+                    y_pred = classify(model=classify_model, X_valid=z_valid_level_aug_t[j].to(args.device))
                     f1 = f1_score(torch.tensor(valid_level_labels[j]).reshape(-1), y_pred.reshape(-1))
                     f1score['level'][train_level][valid_level] = f1
 
@@ -290,10 +288,10 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
                     X = torch.cat([z_train_t, z_train_length_aug_t[i]], dim=0)
                     y = torch.tensor(np.concatenate(
                         [np.zeros((len(train_inlier_index), x_train_np.shape[1])), train_length_labels[i]],
-                        axis=0)).to(device)
+                        axis=0)).to(args.device)
                     if classify_model is None:
                         classify_model = train_classify_model(args=args, X_train=X, y_train=y)
-                    y_pred = classify(model=classify_model, X_valid=z_valid_length_aug_t[j].to(device))
+                    y_pred = classify(model=classify_model, X_valid=z_valid_length_aug_t[j].to(args.device))
                     f1 = f1_score(torch.tensor(valid_length_labels[j]).reshape(-1), y_pred.reshape(-1))
                     f1score['length'][train_length][valid_length] = f1
 
@@ -318,34 +316,36 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
             # with inliers without test level
             visualize(train_inlier=z_train, valid_inlier=z_valid, train_augs=z_train_level_aug,
                       valid_augs=None, train_configs=train_levels, valid_configs=None,
-                      config_name='level', fixed_config=f'fixed_length{fixed_length}', trail=args.trail, test=False)
+                      config_name='level', fixed_config=f'fixed_length{fixed_length}', trail=args.trail, inlier=True,
+                      test=False)
             # without inliers without test level
             visualize(train_inlier=None, valid_inlier=None, train_augs=z_train_level_aug,
                       valid_augs=None, train_configs=train_levels, valid_configs=None,
-                      config_name='level', fixed_config=f'fixed_length{fixed_length}', trail=args.trail, test=False)
+                      config_name='level', fixed_config=f'fixed_length{fixed_length}', trail=args.trail, inlier=False,
+                      test=False)
 
             # with inliers without test length
             visualize(train_inlier=z_train, valid_inlier=z_valid, train_augs=z_train_length_aug,
                       valid_augs=None, train_configs=train_lengths, valid_configs=None,
-                      config_name='length', fixed_config=f'fixed_level{fixed_level}', trail=args.trail, test=False)
+                      config_name='length', fixed_config=f'fixed_level{fixed_level}', trail=args.trail, inlier=True,
+                      test=False)
             # without inliers without test length
             visualize(train_inlier=None, valid_inlier=None, train_augs=z_train_length_aug,
                       valid_augs=None, train_configs=train_lengths, valid_configs=None,
-                      config_name='length', fixed_config=f'fixed_level{fixed_level}', trail=args.trail, test=False)
+                      config_name='length', fixed_config=f'fixed_level{fixed_level}', trail=args.trail, inlier=False,
+                      test=False)
 
     return total_loss, f1score
 
 
 def visualize(train_inlier, valid_inlier, train_augs, valid_augs, train_configs, valid_configs, config_name,
-              fixed_config, trail, inlier=True, test=None, converse=1):
+              fixed_config, trail, inlier=True, test=True, converse=1):
     train_aug = torch.cat(train_augs, dim=0)
-    if test is None or test is True:
+    if test is True:
         valid_aug = torch.cat(valid_augs, dim=0)
         aug = torch.cat([train_aug, valid_aug], dim=0)
-    elif test is False:
-        aug = torch.cat(train_augs, dim=0)
     else:
-        raise Exception('Unsupported test.')
+        aug = torch.cat(train_augs, dim=0)
 
     if inlier is True:
         all_data = torch.cat([train_inlier, valid_inlier, aug], dim=0).to('cpu').numpy()
@@ -361,7 +361,6 @@ def visualize(train_inlier, valid_inlier, train_augs, valid_augs, train_configs,
         plt.figure(figsize=(12, 8))
     else:
         raise Exception('Unsupported config_name.')
-
     if inlier is True:
         # train inliers
         plt.scatter(xt[:len(train_inlier), 0], xt[:len(train_inlier), 1], c='b', alpha=0.5)
@@ -370,7 +369,7 @@ def visualize(train_inlier, valid_inlier, train_augs, valid_augs, train_configs,
                     xt[len(train_inlier):len(train_inlier) + len(valid_inlier), 1], c='g', alpha=0.5)
 
     # train outliers
-    if test is None or test is True:
+    if test is True:
         cmap = cm.get_cmap('Greys')
     else:
         cmap = cm.get_cmap('Reds')
@@ -400,11 +399,11 @@ def visualize(train_inlier, valid_inlier, train_augs, valid_augs, train_configs,
         legend_elements.append(
             Line2D([0], [0], marker='o', color='w', label='Test inliers', markerfacecolor='g', markersize=10))
     for i, value in enumerate(train_configs):
-        legend_elements.append(Line2D([0], [0], marker='o', color='w', label=f'Train Outliers ({config_name}={value})',
+        legend_elements.append(Line2D([0], [0], marker='o', color='w', label=f'Train outliers ({config_name}={value})',
                                       markerfacecolor=colors[i], markersize=10))
 
     # valid outliers
-    if test is None or test is True:
+    if test is True:
         cmap = cm.get_cmap('Reds')
         if len(valid_configs) == 1:
             normalized_values = [0.5]

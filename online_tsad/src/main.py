@@ -22,11 +22,10 @@ if __name__ == "__main__":
         print("Device name:", torch.cuda.get_device_name(0))
     else:
         print("No GPU available, using the CPU instead.")
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # set seed
     pl.seed_everything(0)
-    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.determinstic = True
     torch.backends.cudnn.benchmark = False
     torch.set_float32_matmul_precision("high")
 
@@ -39,14 +38,13 @@ if __name__ == "__main__":
     parser.add_argument("--config_path", type=str, default='configs/default.yml')
     parser.add_argument("--strategy", type=str, default='auto')
     # parser.add_argument("--trail", type=str, default='fixed')
-    parser.add_argument("--trail", type=str, default='length_tau')
     # parser.add_argument("--trail", type=str, default='grid')
-    # parser.add_argument("--trail", type=str, default='wo_first')
     # parser.add_argument("--trail", type=str, default='more_epochs')
+    parser.add_argument("--trail", type=str, default='loss_length_tau')
     # parser.add_argument("--trail", type=str, default='more_negative')
     # parser.add_argument("--trail", type=str, default='warmup')
     # parser.add_argument("--device", type=str, default='cpu')
-    parser.add_argument("--device", type=str, default=device)
+    parser.add_argument("--device", type=str, default='cuda:0')
     parser.add_argument(
         "--test_mode", type=bool, default=False, action=argparse.BooleanOptionalAction
     )
@@ -108,10 +106,11 @@ if __name__ == "__main__":
     print(colored(f"WD:", 'blue'), wd)
     print(colored(f"F1-Score:", 'blue'), f1score)
     print()
-    with open(f'logs/training/{args.trail}/wd_f1score.txt', 'w') as file:
-        file.write('wd: ' + str(wd))
-        file.write("\n")
-        file.write('f1score: ' + str(f1score))
+    if len(wd) != 0 or len(f1score) != 0:
+        with open(f'logs/training/{args.trail}/wd_f1score.txt', 'w') as file:
+            file.write('wd: ' + str(wd))
+            file.write("\n")
+            file.write('f1score: ' + str(f1score))
 
     # acquisition_function = UpperConfidenceBound(kappa=0.1)
     # optimizer = BayesianOptimization(

@@ -4,7 +4,6 @@ import pytorch_lightning as pl
 from info_nce import InfoNCE
 from .model import CNNEncoder
 import random
-import itertools
 
 LENGTH_BINS = [0.2, 0.3, 0.4, 0.5]
 LEVEL_BINS = [-1, -0.33, 0.33, 1]
@@ -44,6 +43,20 @@ def hist_sample(cdf, bins):
     val = np.random.uniform(bins[bin_idx - 1], bins[bin_idx])
     return val
 
+# def hard_negative_loss(z_anc, z_pos, z_neg, meta_anc, meta_neg, temperature=0.1):
+#     meta_anc = torch.tensor(meta_anc).to(z_anc.device)
+#     meta_neg = torch.tensor(meta_neg).to(z_anc.device)
+#     neg_weights = torch.cdist(meta_anc, meta_neg, p=1)
+#
+#     # neg score weighted by absolute distance of hyperparameters
+#     neg = torch.exp(neg_weights * torch.mm(z_anc, z_neg.t().contiguous()) / temperature).sum(dim=-1)
+#
+#     # pos score
+#     pos = torch.exp(torch.sum(z_anc * z_pos, dim=-1) / temperature)
+#
+#     # contrastive loss
+#     loss = (-torch.log(pos / (pos + neg))).mean()
+#     return loss
 
 def hard_negative_loss(z_anc, z_pos, z_neg, meta_anc, meta_neg, temperature=0.1):
     meta_anc = torch.tensor(meta_anc).to(device)
@@ -280,139 +293,142 @@ class Encoder(pl.LightningModule):
     #         self.normal_idx.add(batch_idx)
     #         self.normal_x = torch.cat([self.normal_x, x], dim=0)
     #     x_pos = self.normal_x[np.random.choice(len(self.normal_x), x.shape[0])]
-    #
-    #     y_0, y_1 = x.clone(), x.clone()
-    #     y_0_pos, y_1_pos = x.clone(), x.clone()
-    #     y_0_neg, y_1_neg = x.clone(), x.clone()
-    #     meta_0, meta_1 = [], []
-    #     meta_0_neg, meta_1_neg = [], []
+    #     if self.current_epoch == 110:
+    #         print(1)
+    #     y, y_pos, y_neg = x.clone(), x.clone(), x.clone()
+    #     meta, meta_pos, meta_neg = list(), list(), list()
     #
     #     for i in range(len(x)):
     #         ### Platform anomaly
     #         # m = [hist_sample(level_0_cdf, LEVEL_BINS), np.random.uniform(0, 0.5), hist_sample(length_0_cdf, LENGTH_BINS)]
-    #         # m0 = [FIXED_LEVEL, np.random.uniform(0, 0.5), FIXED_LENGTH]
-    #         if self.args.trail == 'fixed' or self.args.trail == 'length_tau':
-    #             m0 = [FIXED_LEVEL, np.random.uniform(0, 0.5), FIXED_LENGTH]
-    #         elif self.args.trail == 'grid' or self.args.trail == 'wo_first':
-    #             m0 = [config_from_grid(CDF_LEVEL, GRID_LEVEL), np.random.uniform(0, 0.5),
-    #                   config_from_grid(CDF_LENGTH, GRID_LENGTH)]
+    #         # m = [FIXED_LEVEL, np.random.uniform(0, 0.5), FIXED_LENGTH]
+    #         if self.args.trail == 'fixed':
+    #             m = [FIXED_LEVEL, np.random.uniform(0, 0.5), FIXED_LENGTH]
+    #         elif self.args.trail == 'grid' or self.args.trail == 'more_epochs' or self.args.trail == 'loss_length_tau':
+    #             m = [config_from_grid(CDF_LEVEL, GRID_LEVEL), np.random.uniform(0, 0.5),
+    #                  config_from_grid(CDF_LENGTH, GRID_LENGTH)]
     #         else:
     #             raise Exception('Unsupported trail.')
-    #         y_0[i][0] = self.inject_platform(y_0[i][0], *m0)
-    #         meta_0.append(m0)
+    #         y[i][0] = self.inject_platform(y[i][0], *m)
+    #         meta.append(m)
     #
     #         # positive samples
-    #         s0_0 = m0[0] + np.random.uniform(low=-TAU_LEVEL, high=TAU_LEVEL)
-    #         if self.args.trail == 'fixed':
-    #             s1_0 = max(m0[1] + np.random.uniform(low=-TAU_LEVEL, high=TAU_LEVEL), 0)
-    #             s2_0 = max(m0[2] + np.random.uniform(low=-TAU_LEVEL, high=TAU_LEVEL), 0)
+    #         s1 = np.random.uniform(0, 0.5)
+    #         if self.args.trail == 'loss_length_tau':
+    #             s0 = max(m[0] + np.random.uniform(low=-TAU_LEVEL, high=TAU_LEVEL), -1.0)
+    #             s0 = min(s0, 1.0)
+    #             s2 = max(m[2] + np.random.uniform(low=-TAU_LENGTH, high=TAU_LENGTH), 0.20)
+    #             s2 = min(s2, 0.50)
     #         else:
-    #             s1_0 = m0[1]
-    #             s2_0 = max(m0[2] + np.random.uniform(low=-TAU_LENGTH, high=TAU_LENGTH), 0)
-    #         y_0_pos[i][0] = self.inject_platform(y_0_pos[i][0], s0_0, s1_0, s2_0)
+    #             s0 = m[0] + np.random.uniform(low=-TAU, high=TAU)
+    #             s2 = max(m[2] + np.random.uniform(low=-TAU, high=TAU), 0)
+    #
+    #         y_pos[i][0] = self.inject_platform(y_pos[i][0], s0, s1, s2)
+    #         meta_pos.append([s0, s1, s2])
     #
     #         # negative samples
-    #         s0_0_neg = m0[0] + np.random.uniform(low=NEG_RANGE, high=-TAU_LEVEL) \
-    #             if np.random.random() > 0.5 else m0[0] + np.random.uniform(low=TAU_LEVEL, high=POS_RANGE)
-    #         if self.args.trail == 'fixed':
-    #             s1_0_neg = max(m0[1] + np.random.uniform(low=NEG_RANGE, high=-TAU_LEVEL)
-    #                            if np.random.random() > 0.5 else m0[1] + np.random.uniform(low=TAU_LEVEL,
-    #                                                                                       high=POS_RANGE), 0)
-    #             s2_0_neg = max(m0[2] + np.random.uniform(low=NEG_RANGE, high=-TAU_LEVEL)
-    #                            if np.random.random() > 0.5 else m0[2] + np.random.uniform(low=TAU_LEVEL,
-    #                                                                                       high=POS_RANGE), 0)
+    #         s1_neg = np.random.uniform(0, 0.5)
+    #         if self.args.trail == 'loss_length_tau':
+    #             s0_neg = np.random.uniform(low=-1.0, high=m[0] - TAU_LEVEL) if np.random.random() < (
+    #                     (m[0] + 1.0) / 2.0) else np.random.uniform(low=m[0] + TAU_LEVEL, high=1.0)
+    #             s2_neg = np.random.uniform(low=0.20, high=m[2] - TAU_LENGTH) if np.random.random() < (
+    #                     (m[2] - 0.20) / 0.30) else np.random.uniform(low=m[2] + TAU_LENGTH, high=0.50)
     #         else:
-    #             s1_0_neg = m0[1]
-    #             s2_0_neg = max(m0[2] + np.random.uniform(low=NEG_RANGE, high=-TAU_LENGTH)
-    #                            if np.random.random() > 0.5 else m0[2] + np.random.uniform(low=TAU_LENGTH,
-    #                                                                                       high=POS_RANGE), 0)
-    #         y_0_neg[i][0] = self.inject_platform(y_0_neg[i][0], s0_0_neg, s1_0_neg, s2_0_neg)
-    #         meta_0_neg.append([s0_0_neg, s1_0_neg, s2_0_neg])
+    #             s0_neg = m[0] + np.random.uniform(low=-RANGE, high=-TAU) \
+    #                 if np.random.random() > 0.5 else m[0] + np.random.uniform(low=TAU, high=RANGE)
+    #             s2_neg = max(m[2] + np.random.uniform(low=-RANGE, high=-TAU) \
+    #                              if np.random.random() > 0.5 else m[2] + np.random.uniform(low=TAU, high=RANGE), 0)
     #
-    #     meta_0, meta_0_neg = np.array(meta_0), np.array(meta_0_neg)
+    #         y_neg[i][0] = self.inject_platform(y_neg[i][0], s0_neg, s1_neg, s2_neg)
+    #         meta_neg.append([s0_neg, s1_neg, s2_neg])
     #
-    #     outputs = self(torch.cat([x, y_0, y_0_pos, y_0_neg, x_pos], dim=0))
-    #     c_x, c_y_0, c_y_0_pos, c_y_0_neg, c_x_pos = torch.split(outputs, x.shape[0], dim=0)
+    #     outputs = self(torch.cat([x, y, y_pos, y_neg, x_pos], dim=0))
+    #     c_x, c_y, c_y_pos, c_y_neg, c_x_pos = torch.split(outputs, x.shape[0], dim=0)
     #
     #     ### Anomalies should be close to the ones with the same type and similar hyperparameters, and far away from the ones with different types and normal.
-    #     if self.args.trail == 'wo_first':
-    #         loss_global = 0
-    #     else:
-    #         loss_global = self.info_loss(c_y_0, c_y_0_pos, torch.cat([c_x, c_x_pos], dim=0))
+    #     loss_global = self.info_loss(c_y, c_y_pos, torch.cat([c_x, c_x_pos], dim=0))
     #
     #     ### Anomalies with far away hyperparameters should be far away propotional to delta.
-    #     loss_local = hard_negative_loss(c_y_0, c_y_0_pos, c_y_0_neg, meta_0, meta_0_neg)
+    #     if self.args.trail == 'loss_length_tau':
+    #         loss_local = self.info_loss(c_y, c_y_pos, c_y_neg)
+    #     else:
+    #         loss_local = hard_negative_loss(c_y, c_y_pos, c_y_neg, np.array(meta), np.array(meta_neg))
     #
     #     ### Nomral should be close to each other, and far away from anomalies.
-    #     loss_normal = self.info_loss(c_x, c_x_pos, torch.cat([c_y_0, c_y_0_pos, c_y_0_neg], dim=0))
+    #     loss_normal = self.info_loss(c_x, c_x_pos, torch.cat([c_y, c_y_pos, c_y_neg], dim=0))
     #
     #     loss = loss_global + loss_local + loss_normal
+    #
+    #     if loss_global > 0:
+    #         pass
+    #     else:
+    #         raise Exception('!!!')
+    #     self.log("loss_global", loss_global, prog_bar=True)
+    #     self.log("loss_local", loss_local, prog_bar=True)
+    #     self.log("loss_normal", loss_normal, prog_bar=True)
     #     self.log("train_loss", loss, prog_bar=True)
     #     return loss
     #
     # def validation_step(self, x, batch_idx):
     #     x_pos = self.normal_x[np.random.choice(len(self.normal_x), x.shape[0])]
     #
-    #     y_0, y_1 = x.clone(), x.clone()
-    #     y_0_pos, y_1_pos = x.clone(), x.clone()
-    #     y_0_neg, y_1_neg = x.clone(), x.clone()
-    #     meta_0, meta_1 = [], []
-    #     meta_0_neg, meta_1_neg = [], []
+    #     y, y_pos, y_neg = x.clone(), x.clone(), x.clone()
+    #     meta, meta_pos, meta_neg = list(), list(), list()
     #
     #     for i in range(len(x)):
     #         ### Platform anomaly
     #         # m = [hist_sample(level_0_cdf, LEVEL_BINS), np.random.uniform(0, 0.5), hist_sample(length_0_cdf, LENGTH_BINS)]
-    #         if self.args.trail == 'fixed' or self.args.trail == 'length_tau':
-    #             m0 = [FIXED_LEVEL, np.random.uniform(0, 0.5), FIXED_LENGTH]
-    #         elif self.args.trail == 'grid' or self.args.trail == 'wo_first':
-    #             m0 = [config_from_grid(CDF_LEVEL, GRID_LEVEL), np.random.uniform(0, 0.5),
-    #                   config_from_grid(CDF_LENGTH, GRID_LENGTH)]
+    #         if self.args.trail == 'fixed':
+    #             m = [FIXED_LEVEL, np.random.uniform(0, 0.5), FIXED_LENGTH]
+    #         elif self.args.trail == 'grid' or self.args.trail == 'more_epochs' or self.args.trail == 'loss_length_tau':
+    #             m = [config_from_grid(CDF_LEVEL, GRID_LEVEL), np.random.uniform(0, 0.5),
+    #                  config_from_grid(CDF_LENGTH, GRID_LENGTH)]
     #         else:
     #             raise Exception('Unsupported trail.')
-    #         y_0[i][0] = self.inject_platform(y_0[i][0], *m0)
-    #         meta_0.append(m0)
+    #         y[i][0] = self.inject_platform(y[i][0], *m)
+    #         meta.append(m)
     #
     #         # positive sample
-    #         s0_0 = m0[0] + np.random.uniform(low=-TAU_LEVEL, high=TAU_LEVEL)
-    #         if self.args.trail == 'fixed':
-    #             s1_0 = max(m0[1] + np.random.uniform(low=-TAU_LEVEL, high=TAU_LEVEL), 0)
-    #             s2_0 = max(m0[2] + np.random.uniform(low=-TAU_LEVEL, high=TAU_LEVEL), 0)
+    #         s1 = np.random.uniform(0, 0.5)
+    #         if self.args.trail == 'loss_length_tau':
+    #             s0 = max(m[0] + np.random.uniform(low=-TAU_LEVEL, high=TAU_LEVEL), -1.0)
+    #             s0 = min(s0, 1.0)
+    #             s2 = max(m[2] + np.random.uniform(low=-TAU_LENGTH, high=TAU_LENGTH), 0.20)
+    #             s2 = min(s2, 0.50)
     #         else:
-    #             s1_0 = m0[1]
-    #             s2_0 = max(m0[2] + np.random.uniform(low=-TAU_LENGTH, high=TAU_LENGTH), 0)
-    #         y_0_pos[i][0] = self.inject_platform(y_0_pos[i][0], s0_0, s1_0, s2_0)
+    #             s0 = m[0] + np.random.uniform(low=-TAU, high=TAU)
+    #             s2 = max(m[2] + np.random.uniform(low=-TAU, high=TAU), 0)
+    #
+    #         y_pos[i][0] = self.inject_platform(y_pos[i][0], s0, s1, s2)
+    #         meta_pos.append([s0, s1, s2])
     #
     #         # negative samples
-    #         s0_0_neg = m0[0] + np.random.uniform(low=NEG_RANGE, high=-TAU_LEVEL) \
-    #             if np.random.random() > 0.5 else m0[0] + np.random.uniform(low=TAU_LEVEL, high=POS_RANGE)
-    #         if self.args.trail == 'fixed':
-    #             s1_0_neg = max(m0[1] + np.random.uniform(low=NEG_RANGE, high=-TAU_LEVEL)
-    #                            if np.random.random() > 0.5 else m0[1] + np.random.uniform(low=TAU_LEVEL,
-    #                                                                                       high=POS_RANGE), 0)
-    #             s2_0_neg = max(m0[2] + np.random.uniform(low=NEG_RANGE, high=-TAU_LEVEL)
-    #                            if np.random.random() > 0.5 else m0[2] + np.random.uniform(low=TAU_LEVEL,
-    #                                                                                       high=POS_RANGE), 0)
+    #         s1_neg = np.random.uniform(0, 0.5)
+    #         if self.args.trail == 'loss_length_tau':
+    #             s0_neg = np.random.uniform(low=-1.0, high=m[0] - TAU_LEVEL) if np.random.random() < (
+    #                     (m[0] + 1.0) / 2.0) else np.random.uniform(low=m[0] + TAU_LEVEL, high=1.0)
+    #             s2_neg = np.random.uniform(low=0.20, high=m[2] - TAU_LENGTH) if np.random.random() < (
+    #                     (m[2] - 0.20) / 0.30) else np.random.uniform(low=m[2] + TAU_LENGTH, high=0.50)
     #         else:
-    #             s1_0_neg = m0[1]
-    #             s2_0_neg = max(m0[2] + np.random.uniform(low=NEG_RANGE, high=-TAU_LENGTH)
-    #                            if np.random.random() > 0.5 else m0[2] + np.random.uniform(low=TAU_LENGTH,
-    #                                                                                       high=POS_RANGE), 0)
-    #         y_0_neg[i][0] = self.inject_platform(y_0_neg[i][0], s0_0_neg, s1_0_neg, s2_0_neg)
-    #         meta_0_neg.append([s0_0_neg, s1_0_neg, s2_0_neg])
+    #             s0_neg = m[0] + np.random.uniform(low=-RANGE, high=-TAU) \
+    #                 if np.random.random() > 0.5 else m[0] + np.random.uniform(low=TAU, high=RANGE)
+    #             s2_neg = max(m[2] + np.random.uniform(low=-RANGE, high=-TAU) \
+    #                              if np.random.random() > 0.5 else m[2] + np.random.uniform(low=TAU, high=RANGE), 0)
     #
-    #     meta_0, meta_0_neg = np.array(meta_0), np.array(meta_0_neg)
+    #         y_neg[i][0] = self.inject_platform(y_neg[i][0], s0_neg, s1_neg, s2_neg)
+    #         meta_neg.append([s0_neg, s1_neg, s2_neg])
     #
-    #     outputs = self(torch.cat([x, y_0, y_0_pos, y_0_neg, x_pos], dim=0))
-    #     c_x, c_y_0, c_y_0_pos, c_y_0_neg, c_x_pos = torch.split(outputs, x.shape[0], dim=0)
+    #     outputs = self(torch.cat([x, y, y_pos, y_neg, x_pos], dim=0))
+    #     c_x, c_y, c_y_pos, c_y_neg, c_x_pos = torch.split(outputs, x.shape[0], dim=0)
     #
-    #     if self.args.trail == 'wo_first':
-    #         loss_global = 0
+    #     loss_global = self.info_loss(c_y, c_y_pos, torch.cat([c_x, c_x_pos], dim=0))
+    #
+    #     if self.args.trail == 'loss_length_tau':
+    #         loss_local = self.info_loss(c_y, c_y_pos, c_y_neg)
     #     else:
-    #         loss_global = self.info_loss(c_y_0, c_y_0_pos, torch.cat([c_x, c_x_pos], dim=0))
+    #         loss_local = hard_negative_loss(c_y, c_y_pos, c_y_neg, np.array(meta), np.array(meta_neg))
     #
-    #     loss_local = hard_negative_loss(c_y_0, c_y_0_pos, c_y_0_neg, meta_0, meta_0_neg)
-    #
-    #     loss_normal = self.info_loss(c_x, c_x_pos, torch.cat([c_y_0, c_y_0_pos], dim=0))
+    #     loss_normal = self.info_loss(c_x, c_x_pos, torch.cat([c_y, c_y_pos, c_y_neg], dim=0))
     #
     #     loss = loss_global + loss_local + loss_normal
     #     self.log("loss_global", loss_global, prog_bar=True)

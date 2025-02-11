@@ -3,15 +3,19 @@ import pandas as pd
 import numpy as np
 import ast
 
-trail = 'fixed'
+# trail = 'fixed'
 # trail = 'grid'
-# trail = 'wo_first'
+# trail = 'more_epochs'
+trail = 'loss_length_tau'
 # trail = 'more_negative'
-skip = 20
+
+skip = 100
 
 
-def plot_loss_curve():
+def plot_loss_curve(last=False):
     df = pd.read_csv(f'logs/training/{trail}/metrics.csv').dropna(subset=["val_loss"])
+    if last is True:
+        df = df.tail(300)
     epoch = df["epoch"]
     plt.figure(figsize=(6, 4))
     plt.plot(epoch, df["loss_global"], marker="s", markersize=10, markerfacecolor='none', linestyle="-",
@@ -22,12 +26,13 @@ def plot_loss_curve():
              markeredgecolor="green", color="green", label=f"Third Loss", markevery=skip)
     plt.plot(epoch, df["val_loss"], marker="o", markersize=10, markerfacecolor='none', linestyle="-",
              markeredgecolor="black", color="black", label=f"Overall Loss", markevery=skip)
-    plt.xticks(np.arange(0, len(epoch), skip))
+    plt.xticks(np.arange(epoch.iloc[0], epoch.iloc[-1], skip))
     plt.title("Validation Loss Curve")
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
     plt.legend()
-    plt.savefig(f'logs/training/{trail}/loss_curve.pdf')
+    plt.savefig(f'logs/training/{trail}/loss_curve_last{last}.pdf')
+    plt.show()
     plt.close()
 
 
@@ -57,12 +62,9 @@ def plot_wd_f1score():
         values = np.zeros((len(y_values), len(x_values)))
         for i, x in enumerate(x_values):
             for j, y in enumerate(y_values):
-                if title == 'WD':
-                    values[j, i] = -data[x][y]
-                else:
-                    values[j, i] = data[x][y]
+                values[j, i] = data[x][y]
         plt.figure(figsize=(8, 6))
-        plt.pcolormesh(y_config, x_config, np.ma.masked_where(values == 0, values), shading="auto", cmap="viridis",
+        plt.pcolormesh(y_config, x_config, np.ma.masked_where(values == 0, values), cmap="viridis",
                        vmin=np.min(values), vmax=np.max(values))
         if title == 'WD':
             for i in range(values.shape[1]):
@@ -96,5 +98,6 @@ def plot_wd_f1score():
 
 
 if __name__ == "__main__":
-    plot_loss_curve()
-    # plot_wd_f1score()
+    plot_loss_curve(last=False)
+    plot_loss_curve(last=True)
+    plot_wd_f1score()
