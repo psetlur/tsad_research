@@ -196,7 +196,7 @@ class Encoder(pl.LightningModule):
                          for i, c_y_p in enumerate(c_y_pos)) / len(c_y_pos)
 
         ### Nomral should be close to each other, and far away from anomalies.
-        loss_normal = self.info_loss(c_x, torch.cat(c_y_pos, dim=0), torch.cat([c_x] + c_y_pos, dim=0)) 
+        loss_normal = self.info_loss(c_x, torch.cat(c_y_pos, dim=0), torch.cat([c_x] + list(c_y_pos), dim=0))
 
         loss = weight_global * loss_global + weight_local * loss_local + weight_normal * loss_normal
         self.log("train_loss", loss, prog_bar=True)
@@ -263,7 +263,8 @@ class Encoder(pl.LightningModule):
         loss_local = sum(hard_negative_loss(c_x, c_y_p, torch.stack(c_y_neg), meta_pos[i], meta_neg[i]) 
                          for i, c_y_p in enumerate(c_y_pos)) / len(c_y_pos)
 
-        loss_normal = self.info_loss(c_x, torch.cat(c_y_pos, dim=0), torch.cat([c_x] + c_y_pos, dim=0)) 
+        loss_normal = self.info_loss(c_x, torch.cat(c_y_pos, dim=0), torch.cat([c_x] + list(c_y_pos), dim=0))
+
         
         loss = loss_global + loss_local + loss_normal
         self.log("loss_global", loss_global, prog_bar=True)
