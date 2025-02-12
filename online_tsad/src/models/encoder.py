@@ -120,7 +120,7 @@ class Encoder(pl.LightningModule):
 
     def training_step(self, x, batch_idx):
         x = x.to(device)
-        self.normal_x.to(device)
+        self.normal_x = self.normal_x.to(device)
         if batch_idx not in self.normal_idx:
             self.normal_idx.add(batch_idx)
             self.normal_x = torch.cat([self.normal_x, x], dim=0).to(device)

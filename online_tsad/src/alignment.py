@@ -17,9 +17,11 @@ logging.getLogger("pytorch_lightning").setLevel(logging.WARNING)
 logging.basicConfig(level=logging.INFO)
 
 import matplotlib.pyplot as plt
-from sklearn.manifold import TSNE
+from sklearn.manifold import TSNE, Isomap
 import matplotlib.cm as cm
 import random
+import umap
+import matplotlib.cm as cm
 
 
 class EmbNormalizer:
@@ -436,6 +438,167 @@ def visualize(train_inlier, valid_inlier, train_augs, valid_augs, train_configs,
     #     plt.title('t-SNE Visualization of Embeddings (Later on the Top)')
     # else:
     #     plt.title('t-SNE Visualization of Embeddings (Later on the Bottom)')
+    plt.tight_layout()
+    plt.savefig(f'logs/training/{trail}/{fixed_config}_inlier{inlier}_test{test}.pdf', bbox_inches='tight')
+    plt.close()
+
+
+def visualize_umap(train_inlier, valid_inlier, train_augs, valid_augs, train_configs, valid_configs, config_name,
+                   fixed_config, trail, inlier=True, test=True, converse=1):
+    train_aug = torch.cat(train_augs, dim=0)
+    if test is True:
+        valid_aug = torch.cat(valid_augs, dim=0)
+        aug = torch.cat([train_aug, valid_aug], dim=0)
+    else:
+        aug = torch.cat(train_augs, dim=0)
+
+    if inlier is True:
+        all_data = torch.cat([train_inlier, valid_inlier, aug], dim=0).to('cpu').numpy()
+        inlier_size = len(train_inlier) + len(valid_inlier)
+    else:
+        all_data = torch.cat([aug], dim=0).to('cpu').numpy()
+        inlier_size = 0
+
+    xt = umap.UMAP(n_components=2, random_state=42).fit_transform(all_data)
+    if config_name == 'level':
+        plt.figure(figsize=(12, 10))
+    elif config_name == 'length':
+        plt.figure(figsize=(12, 8))
+    else:
+        raise Exception('Unsupported config_name.')
+    
+    if inlier is True:
+        # train inliers
+        plt.scatter(xt[:len(train_inlier), 0], xt[:len(train_inlier), 1], c='b', alpha=0.5)
+        # test inliers
+        plt.scatter(xt[len(train_inlier):len(train_inlier) + len(valid_inlier), 0],
+                    xt[len(train_inlier):len(train_inlier) + len(valid_inlier), 1], c='g', alpha=0.5)
+
+    # train outliers
+    if test is True:
+        cmap = cm.get_cmap('Greys')
+    else:
+        cmap = cm.get_cmap('Reds')
+
+    #     cmap = cm.get_cmap('tab20')
+    if len(train_configs) == 1:
+        normalized_values = [0.5]
+    else:
+        normalized_values = (train_configs - np.min(train_configs)) / (np.max(train_configs) - np.min(train_configs))
+        normalized_values = normalized_values * (1 - 0.1) + 0.1
+    colors = [cmap(val) for val in normalized_values]
+
+    for i, value in enumerate(train_configs):
+        start_idx = inlier_size + i * len(train_augs[i])
+        end_idx = start_idx + len(train_augs[i])
+        plt.scatter(xt[start_idx:end_idx, 0], xt[start_idx:end_idx, 1], c=[colors[i]] * (end_idx - start_idx),
+                    alpha=0.5)
+    
+    legend_elements = []
+    if inlier is True:
+        legend_elements.append(
+            Line2D([0], [0], marker='o', color='w', label='Train inliers', markerfacecolor='b', markersize=10))
+        legend_elements.append(
+            Line2D([0], [0], marker='o', color='w', label='Test inliers', markerfacecolor='g', markersize=10))
+    
+    for i, value in enumerate(train_configs):
+        legend_elements.append(Line2D([0], [0], marker='o', color='w', label=f'Train outliers ({config_name}={value})',
+                                      markerfacecolor=colors[i], markersize=10))
+    
+    if test is True:
+        cmap = cm.get_cmap('Reds')
+        if len(valid_configs) == 1:
+            normalized_values = [0.5]
+        else:
+            normalized_values = (valid_configs - np.min(valid_configs)) / (
+                    np.max(valid_configs) - np.min(valid_configs))
+            normalized_values = normalized_values * (1 - 0.1) + 0.1
+        colors = [cmap(val) for val in normalized_values]
+        for i, value in enumerate(valid_configs):
+            start_idx = inlier_size + len(train_aug) + i * len(valid_augs[i])
+            end_idx = start_idx + len(valid_augs[i])
+            plt.scatter(xt[start_idx:end_idx, 0], xt[start_idx:end_idx, 1], c=[colors[i]] * (end_idx - start_idx),
+                        alpha=0.5)
+        for i, value in enumerate(valid_configs):
+            legend_elements.append(
+                Line2D([0], [0], marker='o', color='w', label=f'Test outliers ({config_name}={value})',
+                       markerfacecolor=colors[i], markersize=10))
+
+    plt.legend(handles=legend_elements, loc="upper left", bbox_to_anchor=(1, 1))
+    plt.xlabel('UMAP 1')
+    plt.ylabel('UMAP 2')
+    plt.title('UMAP Visualization of Embeddings')
+    plt.tight_layout()
+    plt.savefig(f'logs/training/{trail}/{fixed_config}_inlier{inlier}_test{test}_UMAP.pdf', bbox_inches='tight')
+    plt.close()
+
+def visualize_Isomap(train_inlier, valid_inlier, train_augs, valid_augs, train_configs, valid_configs, config_name,
+                   fixed_config, trail, inlier=True, test=True, converse=1):
+    train_aug = torch.cat(train_augs, dim=0)
+    if test is True:
+        valid_aug = torch.cat(valid_augs, dim=0)
+        aug = torch.cat([train_aug, valid_aug], dim=0)
+    else:
+        aug = torch.cat(train_augs, dim=0)
+
+    if inlier is True:
+        all_data = torch.cat([train_inlier, valid_inlier, aug], dim=0).to('cpu').numpy()
+        inlier_size = len(train_inlier) + len(valid_inlier)
+    else:
+        all_data = torch.cat([aug], dim=0).to('cpu').numpy()
+        inlier_size = 0
+
+    xt = Isomap(n_components=2).fit_transform(all_data)
+    if config_name == 'level':
+        plt.figure(figsize=(12, 10))
+    elif config_name == 'length':
+        plt.figure(figsize=(12, 8))
+    else:
+        raise Exception('Unsupported config_name.')
+    
+    if inlier is True:
+        # train inliers
+        plt.scatter(xt[:len(train_inlier), 0], xt[:len(train_inlier), 1], c='b', alpha=0.5)
+        # test inliers
+        plt.scatter(xt[len(train_inlier):len(train_inlier) + len(valid_inlier), 0],
+                    xt[len(train_inlier):len(train_inlier) + len(valid_inlier), 1], c='g', alpha=0.5)
+
+    cmap = cm.get_cmap('Greys') if test else cm.get_cmap('Reds')
+    normalized_values = ([0.5] if len(train_configs) == 1 else
+                         (train_configs - np.min(train_configs)) / (np.max(train_configs) - np.min(train_configs)) * 0.9 + 0.1)
+    colors = [cmap(val) for val in normalized_values]
+    for i, value in enumerate(train_configs):
+        start_idx = inlier_size + i * len(train_augs[i])
+        end_idx = start_idx + len(train_augs[i])
+        plt.scatter(xt[start_idx:end_idx, 0], xt[start_idx:end_idx, 1], c=[colors[i]] * (end_idx - start_idx), alpha=0.5)
+    
+    legend_elements = []
+    if inlier:
+        legend_elements.extend([
+            Line2D([0], [0], marker='o', color='w', label='Train inliers', markerfacecolor='b', markersize=10),
+            Line2D([0], [0], marker='o', color='w', label='Test inliers', markerfacecolor='g', markersize=10)
+        ])
+    for i, value in enumerate(train_configs):
+        legend_elements.append(Line2D([0], [0], marker='o', color='w', label=f'Train outliers ({config_name}={value})',
+                                      markerfacecolor=colors[i], markersize=10))
+    
+    if test:
+        cmap = cm.get_cmap('Reds')
+        normalized_values = ([0.5] if len(valid_configs) == 1 else
+                             (valid_configs - np.min(valid_configs)) / (np.max(valid_configs) - np.min(valid_configs)) * 0.9 + 0.1)
+        colors = [cmap(val) for val in normalized_values]
+        for i, value in enumerate(valid_configs):
+            start_idx = inlier_size + len(train_aug) + i * len(valid_augs[i])
+            end_idx = start_idx + len(valid_augs[i])
+            plt.scatter(xt[start_idx:end_idx, 0], xt[start_idx:end_idx, 1], c=[colors[i]] * (end_idx - start_idx), alpha=0.5)
+        for i, value in enumerate(valid_configs):
+            legend_elements.append(Line2D([0], [0], marker='o', color='w', label=f'Test outliers ({config_name}={value})',
+                                          markerfacecolor=colors[i], markersize=10))
+
+    plt.legend(handles=legend_elements, loc='upper left', bbox_to_anchor=(1, 1))
+    plt.xlabel('Isomap 1')
+    plt.ylabel('Isomap 2')
+    plt.title('Isomap Visualization of Embeddings')
     plt.tight_layout()
     plt.savefig(f'logs/training/{trail}/{fixed_config}_inlier{inlier}_test{test}.pdf', bbox_inches='tight')
     plt.close()
