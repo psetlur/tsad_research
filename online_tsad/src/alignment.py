@@ -237,15 +237,16 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
                 length_x_aug in x_valid_length_aug]
 
             z_aug = model(torch.tensor(np.array(x_aug)).float().unsqueeze(1).to(args.device)).detach()
-            z_train_t, z_valid_t, z_aug_t = emb(z_train[train_inlier_index].clone().squeeze(),
-                                                z_valid[valid_inlier_index].clone().squeeze(),
-                                                z_aug.clone().squeeze())
-            z_train_level_aug_t = [emb.normalize(z_aug) for z_aug in z_train_level_aug]
-            z_train_length_aug_t = [emb.normalize(z_aug) for z_aug in z_train_length_aug]
-            z_valid_level_aug_t = [emb.normalize(z_aug) for z_aug in z_valid_level_aug]
-            z_valid_length_aug_t = [emb.normalize(z_aug) for z_aug in z_valid_length_aug]
+            # z_train_t, z_valid_t, z_aug_t = emb(z_train[train_inlier_index].clone().squeeze(),
+            #                                     z_valid[valid_inlier_index].clone().squeeze(),
+            #                                     z_aug.clone().squeeze())
+            # z_train_level_aug_t = [emb.normalize(z_aug) for z_aug in z_train_level_aug]
+            # z_train_length_aug_t = [emb.normalize(z_aug) for z_aug in z_train_length_aug]
+            # z_valid_level_aug_t = [emb.normalize(z_aug) for z_aug in z_valid_level_aug]
+            # z_valid_length_aug_t = [emb.normalize(z_aug) for z_aug in z_valid_length_aug]
+            #
+            # W_loss = geomloss.SamplesLoss("sinkhorn", p=2, blur=0.05, scaling=0.9)
 
-            W_loss = geomloss.SamplesLoss("sinkhorn", p=2, blur=0.05, scaling=0.9)
             # loss = -W_loss(torch.cat([z_train_t, z_aug_t], dim=0), z_valid_t).item()
             # total_loss.append(loss)
             # z_test_t = emb.normalize(z_test)
@@ -255,93 +256,83 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
             #                   z_test_t.to(args.device))
             # f1score.append(f1_score(y_test.reshape(-1), y_pred.reshape(-1)))
 
-            total_loss['level'] = dict()
-            f1score['level'] = dict()
-            for i, train_level in enumerate(train_levels):
-                total_loss['level'][train_level] = dict()
-                f1score['level'][train_level] = dict()
-                classify_model = None
-                for j, valid_level in enumerate(valid_levels):
-                    loss = W_loss(z_train_level_aug_t[i], z_valid_level_aug_t[j]).item()
-                    total_loss['level'][train_level][valid_level] = loss
+            # total_loss['level'] = dict()
+            # f1score['level'] = dict()
+            # for i, train_level in enumerate(train_levels):
+            #     total_loss['level'][train_level] = dict()
+            #     f1score['level'][train_level] = dict()
+            #     classify_model = None
+            #     for j, valid_level in enumerate(valid_levels):
+            #         loss = W_loss(z_train_level_aug_t[i], z_valid_level_aug_t[j]).item()
+            #         total_loss['level'][train_level][valid_level] = loss
+            #
+            #         X = torch.cat([z_train_t, z_train_level_aug_t[i]], dim=0)
+            #         y = torch.tensor(np.concatenate(
+            #             [np.zeros((len(train_inlier_index), x_train_np.shape[1])), train_level_labels[i]],
+            #             axis=0)).to(args.device)
+            #         if classify_model is None:
+            #             classify_model = train_classify_model(args=args, X_train=X, y_train=y)
+            #         y_pred = classify(model=classify_model, X_valid=z_valid_level_aug_t[j].to(args.device))
+            #         f1 = f1_score(torch.tensor(valid_level_labels[j]).reshape(-1), y_pred.reshape(-1))
+            #         f1score['level'][train_level][valid_level] = f1
+            #
+            #         print(f'train_level: {train_level}, valid_level: {valid_level}, wd: {loss}, f1score: {f1}')
+            #
+            # total_loss['length'] = dict()
+            # f1score['length'] = dict()
+            # for i, train_length in enumerate(train_lengths):
+            #     total_loss['length'][train_length] = dict()
+            #     f1score['length'][train_length] = dict()
+            #     classify_model = None
+            #     for j, valid_length in enumerate(valid_lengths):
+            #         loss = W_loss(z_train_length_aug_t[i], z_valid_length_aug_t[j]).item()
+            #         total_loss['length'][train_length][valid_length] = loss
+            #
+            #         X = torch.cat([z_train_t, z_train_length_aug_t[i]], dim=0)
+            #         y = torch.tensor(np.concatenate(
+            #             [np.zeros((len(train_inlier_index), x_train_np.shape[1])), train_length_labels[i]],
+            #             axis=0)).to(args.device)
+            #         if classify_model is None:
+            #             classify_model = train_classify_model(args=args, X_train=X, y_train=y)
+            #         y_pred = classify(model=classify_model, X_valid=z_valid_length_aug_t[j].to(args.device))
+            #         f1 = f1_score(torch.tensor(valid_length_labels[j]).reshape(-1), y_pred.reshape(-1))
+            #         f1score['length'][train_length][valid_length] = f1
+            #
+            #         print(f'train_length: {train_length}, valid_length: {valid_length}, wd: {loss}, f1score: {f1}')
 
-                    X = torch.cat([z_train_t, z_train_level_aug_t[i]], dim=0)
-                    y = torch.tensor(np.concatenate(
-                        [np.zeros((len(train_inlier_index), x_train_np.shape[1])), train_level_labels[i]],
-                        axis=0)).to(args.device)
-                    if classify_model is None:
-                        classify_model = train_classify_model(args=args, X_train=X, y_train=y)
-                    y_pred = classify(model=classify_model, X_valid=z_valid_level_aug_t[j].to(args.device))
-                    f1 = f1_score(torch.tensor(valid_level_labels[j]).reshape(-1), y_pred.reshape(-1))
-                    f1score['level'][train_level][valid_level] = f1
-
-                    print(f'train_level: {train_level}, valid_level: {valid_level}, wd: {loss}, f1score: {f1}')
-
-            total_loss['length'] = dict()
-            f1score['length'] = dict()
-            for i, train_length in enumerate(train_lengths):
-                total_loss['length'][train_length] = dict()
-                f1score['length'][train_length] = dict()
-                classify_model = None
-                for j, valid_length in enumerate(valid_lengths):
-                    loss = W_loss(z_train_length_aug_t[i], z_valid_length_aug_t[j]).item()
-                    total_loss['length'][train_length][valid_length] = loss
-
-                    X = torch.cat([z_train_t, z_train_length_aug_t[i]], dim=0)
-                    y = torch.tensor(np.concatenate(
-                        [np.zeros((len(train_inlier_index), x_train_np.shape[1])), train_length_labels[i]],
-                        axis=0)).to(args.device)
-                    if classify_model is None:
-                        classify_model = train_classify_model(args=args, X_train=X, y_train=y)
-                    y_pred = classify(model=classify_model, X_valid=z_valid_length_aug_t[j].to(args.device))
-                    f1 = f1_score(torch.tensor(valid_length_labels[j]).reshape(-1), y_pred.reshape(-1))
-                    f1score['length'][train_length][valid_length] = f1
-
-                    print(f'train_length: {train_length}, valid_length: {valid_length}, wd: {loss}, f1score: {f1}')
-
-            # with inliers
+            # visualize(train_inlier=z_train, valid_inlier=z_valid, train_augs=z_train_level_aug,
+            #           valid_augs=z_valid_level_aug, train_configs=train_levels, valid_configs=valid_levels,
+            #           config_name='level', fixed_config=f'fixed_length{fixed_length}', trail=args.trail, test=True,
+            #           tool='tsne')
+            # visualize(train_inlier=z_train, valid_inlier=z_valid, train_augs=z_train_level_aug,
+            #           valid_augs=z_valid_level_aug, train_configs=train_levels, valid_configs=valid_levels,
+            #           config_name='level', fixed_config=f'fixed_length{fixed_length}', trail=args.trail, test=True,
+            #           tool='umap')
             visualize(train_inlier=z_train, valid_inlier=z_valid, train_augs=z_train_level_aug,
                       valid_augs=z_valid_level_aug, train_configs=train_levels, valid_configs=valid_levels,
-                      config_name='level', fixed_config=f'fixed_length{fixed_length}', trail=args.trail, inlier=True)
-            visualize(train_inlier=z_train, valid_inlier=z_valid, train_augs=z_train_length_aug,
-                      valid_augs=z_valid_length_aug, train_configs=train_lengths, valid_configs=valid_lengths,
-                      config_name='length', fixed_config=f'fixed_level{fixed_level}', trail=args.trail, inlier=True)
-
-            # without inliers
-            visualize(train_inlier=None, valid_inlier=None, train_augs=z_train_level_aug,
-                      valid_augs=z_valid_level_aug, train_configs=train_levels, valid_configs=valid_levels,
-                      config_name='level', fixed_config=f'fixed_length{fixed_length}', trail=args.trail, inlier=False)
-            visualize(train_inlier=None, valid_inlier=None, train_augs=z_train_length_aug,
-                      valid_augs=z_valid_length_aug, train_configs=train_lengths, valid_configs=valid_lengths,
-                      config_name='length', fixed_config=f'fixed_level{fixed_level}', trail=args.trail, inlier=False)
-
-            # with inliers without test level
-            visualize(train_inlier=z_train, valid_inlier=z_valid, train_augs=z_train_level_aug,
-                      valid_augs=None, train_configs=train_levels, valid_configs=None,
-                      config_name='level', fixed_config=f'fixed_length{fixed_length}', trail=args.trail, inlier=True,
-                      test=False)
-            # without inliers without test level
-            visualize(train_inlier=None, valid_inlier=None, train_augs=z_train_level_aug,
-                      valid_augs=None, train_configs=train_levels, valid_configs=None,
-                      config_name='level', fixed_config=f'fixed_length{fixed_length}', trail=args.trail, inlier=False,
-                      test=False)
-
-            # with inliers without test length
-            visualize(train_inlier=z_train, valid_inlier=z_valid, train_augs=z_train_length_aug,
-                      valid_augs=None, train_configs=train_lengths, valid_configs=None,
-                      config_name='length', fixed_config=f'fixed_level{fixed_level}', trail=args.trail, inlier=True,
-                      test=False)
-            # without inliers without test length
-            visualize(train_inlier=None, valid_inlier=None, train_augs=z_train_length_aug,
-                      valid_augs=None, train_configs=train_lengths, valid_configs=None,
-                      config_name='length', fixed_config=f'fixed_level{fixed_level}', trail=args.trail, inlier=False,
-                      test=False)
+                      config_name='level', fixed_config=f'fixed_length{fixed_length}', trail=args.trail, test=True,
+                      tool='isomap')
+            # # with test
+            # visualize(train_inlier=z_train, valid_inlier=z_valid, train_augs=z_train_level_aug,
+            #           valid_augs=z_valid_level_aug, train_configs=train_levels, valid_configs=valid_levels,
+            #           config_name='level', fixed_config=f'fixed_length{fixed_length}', trail=args.trail,test=True)
+            # visualize(train_inlier=z_train, valid_inlier=z_valid, train_augs=z_train_length_aug,
+            #           valid_augs=z_valid_length_aug, train_configs=train_lengths, valid_configs=valid_lengths,
+            #           config_name='length', fixed_config=f'fixed_level{fixed_level}', trail=args.trail,test=True)
+            #
+            # # without test
+            # visualize(train_inlier=z_train, valid_inlier=z_valid, train_augs=z_train_level_aug,
+            #           valid_augs=None, train_configs=train_levels, valid_configs=None,
+            #           config_name='level', fixed_config=f'fixed_length{fixed_length}', trail=args.trail,test=False)
+            # visualize(train_inlier=z_train, valid_inlier=z_valid, train_augs=z_train_length_aug,
+            #           valid_augs=None, train_configs=train_lengths, valid_configs=None,
+            #           config_name='length', fixed_config=f'fixed_level{fixed_level}', trail=args.trail,test=False)
 
     return total_loss, f1score
 
 
 def visualize(train_inlier, valid_inlier, train_augs, valid_augs, train_configs, valid_configs, config_name,
-              fixed_config, trail, inlier=True, test=True, converse=1):
+              fixed_config, trail, inlier=True, test=True, converse=1, tool='tsne'):
     train_aug = torch.cat(train_augs, dim=0)
     if test is True:
         valid_aug = torch.cat(valid_augs, dim=0)
@@ -349,26 +340,37 @@ def visualize(train_inlier, valid_inlier, train_augs, valid_augs, train_configs,
     else:
         aug = torch.cat(train_augs, dim=0)
 
-    if inlier is True:
-        all_data = torch.cat([train_inlier, valid_inlier, aug], dim=0).to('cpu').numpy()
-        inlier_size = len(train_inlier) + len(valid_inlier)
-    else:
-        all_data = torch.cat([aug], dim=0).to('cpu').numpy()
-        inlier_size = 0
+    all_data = torch.cat([train_inlier, valid_inlier, aug], dim=0).to('cpu').numpy()
+    inlier_size = len(train_inlier) + len(valid_inlier)
 
-    xt = TSNE(n_components=2, random_state=42).fit_transform(all_data)
+    # if inlier is True:
+    #     all_data = torch.cat([train_inlier, valid_inlier, aug], dim=0).to('cpu').numpy()
+    #     inlier_size = len(train_inlier) + len(valid_inlier)
+    # else:
+    #     all_data = torch.cat([aug], dim=0).to('cpu').numpy()
+    #     inlier_size = 0
+
+    if tool == 'tsne':
+        xt = TSNE(n_components=2, random_state=42).fit_transform(all_data)
+    elif tool == 'umap':
+        xt = umap.UMAP(n_components=2, random_state=42).fit_transform(all_data)
+    elif tool == 'isomap':
+        xt = Isomap(n_components=2).fit_transform(all_data)
+    else:
+        raise Exception('Unsupported tool.')
+
     if config_name == 'level':
         plt.figure(figsize=(12, 10))
     elif config_name == 'length':
         plt.figure(figsize=(12, 8))
     else:
         raise Exception('Unsupported config_name.')
-    if inlier is True:
-        # train inliers
-        plt.scatter(xt[:len(train_inlier), 0], xt[:len(train_inlier), 1], c='b', alpha=0.5)
-        # test inliers
-        plt.scatter(xt[len(train_inlier):len(train_inlier) + len(valid_inlier), 0],
-                    xt[len(train_inlier):len(train_inlier) + len(valid_inlier), 1], c='g', alpha=0.5)
+    # if inlier is True:
+    # train inliers
+    plt.scatter(xt[:len(train_inlier), 0], xt[:len(train_inlier), 1], c='b', alpha=0.5)
+    # test inliers
+    plt.scatter(xt[len(train_inlier):len(train_inlier) + len(valid_inlier), 0],
+                xt[len(train_inlier):len(train_inlier) + len(valid_inlier), 1], c='g', alpha=0.5)
 
     # train outliers
     if test is True:
@@ -395,11 +397,11 @@ def visualize(train_inlier, valid_inlier, train_augs, valid_augs, train_configs,
         #     plt.scatter(xt[start_idx:end_idx, 0], xt[start_idx:end_idx, 1], c=[colors[i]] * (end_idx - start_idx),
         #                 alpha=0.5, zorder=len(train_configs) - i)
     legend_elements = list()
-    if inlier is True:
-        legend_elements.append(
-            Line2D([0], [0], marker='o', color='w', label='Train inliers', markerfacecolor='b', markersize=10))
-        legend_elements.append(
-            Line2D([0], [0], marker='o', color='w', label='Test inliers', markerfacecolor='g', markersize=10))
+    # if inlier is True:
+    legend_elements.append(
+        Line2D([0], [0], marker='o', color='w', label='Train inliers', markerfacecolor='b', markersize=10))
+    legend_elements.append(
+        Line2D([0], [0], marker='o', color='w', label='Test inliers', markerfacecolor='g', markersize=10))
     for i, value in enumerate(train_configs):
         legend_elements.append(Line2D([0], [0], marker='o', color='w', label=f'Train outliers ({config_name}={value})',
                                       markerfacecolor=colors[i], markersize=10))
@@ -431,174 +433,25 @@ def visualize(train_inlier, valid_inlier, train_augs, valid_augs, train_configs,
                        markerfacecolor=colors[i], markersize=10))
 
     plt.legend(handles=legend_elements, loc="upper left", bbox_to_anchor=(1, 1))
-    plt.xlabel('t-SNE 1')
-    plt.ylabel('t-SNE 2')
-    plt.title('t-SNE Visualization of Embeddings')
+
+    if tool == 'tsne':
+        plt.xlabel('t-SNE 1')
+        plt.ylabel('t-SNE 2')
+        plt.title('t-SNE Visualization of Embeddings')
+    elif tool == 'umap':
+        plt.xlabel('UMAP 1')
+        plt.ylabel('UMAP 2')
+        plt.title('UMAP Visualization of Embeddings')
+    else:
+        plt.xlabel('Isomap 1')
+        plt.ylabel('Isomap 2')
+        plt.title('Isomap Visualization of Embeddings')
+
     # if converse == 1:
     #     plt.title('t-SNE Visualization of Embeddings (Later on the Top)')
     # else:
     #     plt.title('t-SNE Visualization of Embeddings (Later on the Bottom)')
     plt.tight_layout()
-    plt.savefig(f'logs/training/{trail}/{fixed_config}_inlier{inlier}_test{test}.pdf', bbox_inches='tight')
-    plt.close()
-
-
-def visualize_umap(train_inlier, valid_inlier, train_augs, valid_augs, train_configs, valid_configs, config_name,
-                   fixed_config, trail, inlier=True, test=True, converse=1):
-    train_aug = torch.cat(train_augs, dim=0)
-    if test is True:
-        valid_aug = torch.cat(valid_augs, dim=0)
-        aug = torch.cat([train_aug, valid_aug], dim=0)
-    else:
-        aug = torch.cat(train_augs, dim=0)
-
-    if inlier is True:
-        all_data = torch.cat([train_inlier, valid_inlier, aug], dim=0).to('cpu').numpy()
-        inlier_size = len(train_inlier) + len(valid_inlier)
-    else:
-        all_data = torch.cat([aug], dim=0).to('cpu').numpy()
-        inlier_size = 0
-
-    xt = umap.UMAP(n_components=2, random_state=42).fit_transform(all_data)
-    if config_name == 'level':
-        plt.figure(figsize=(12, 10))
-    elif config_name == 'length':
-        plt.figure(figsize=(12, 8))
-    else:
-        raise Exception('Unsupported config_name.')
-    
-    if inlier is True:
-        # train inliers
-        plt.scatter(xt[:len(train_inlier), 0], xt[:len(train_inlier), 1], c='b', alpha=0.5)
-        # test inliers
-        plt.scatter(xt[len(train_inlier):len(train_inlier) + len(valid_inlier), 0],
-                    xt[len(train_inlier):len(train_inlier) + len(valid_inlier), 1], c='g', alpha=0.5)
-
-    # train outliers
-    if test is True:
-        cmap = cm.get_cmap('Greys')
-    else:
-        cmap = cm.get_cmap('Reds')
-
-    #     cmap = cm.get_cmap('tab20')
-    if len(train_configs) == 1:
-        normalized_values = [0.5]
-    else:
-        normalized_values = (train_configs - np.min(train_configs)) / (np.max(train_configs) - np.min(train_configs))
-        normalized_values = normalized_values * (1 - 0.1) + 0.1
-    colors = [cmap(val) for val in normalized_values]
-
-    for i, value in enumerate(train_configs):
-        start_idx = inlier_size + i * len(train_augs[i])
-        end_idx = start_idx + len(train_augs[i])
-        plt.scatter(xt[start_idx:end_idx, 0], xt[start_idx:end_idx, 1], c=[colors[i]] * (end_idx - start_idx),
-                    alpha=0.5)
-    
-    legend_elements = []
-    if inlier is True:
-        legend_elements.append(
-            Line2D([0], [0], marker='o', color='w', label='Train inliers', markerfacecolor='b', markersize=10))
-        legend_elements.append(
-            Line2D([0], [0], marker='o', color='w', label='Test inliers', markerfacecolor='g', markersize=10))
-    
-    for i, value in enumerate(train_configs):
-        legend_elements.append(Line2D([0], [0], marker='o', color='w', label=f'Train outliers ({config_name}={value})',
-                                      markerfacecolor=colors[i], markersize=10))
-    
-    if test is True:
-        cmap = cm.get_cmap('Reds')
-        if len(valid_configs) == 1:
-            normalized_values = [0.5]
-        else:
-            normalized_values = (valid_configs - np.min(valid_configs)) / (
-                    np.max(valid_configs) - np.min(valid_configs))
-            normalized_values = normalized_values * (1 - 0.1) + 0.1
-        colors = [cmap(val) for val in normalized_values]
-        for i, value in enumerate(valid_configs):
-            start_idx = inlier_size + len(train_aug) + i * len(valid_augs[i])
-            end_idx = start_idx + len(valid_augs[i])
-            plt.scatter(xt[start_idx:end_idx, 0], xt[start_idx:end_idx, 1], c=[colors[i]] * (end_idx - start_idx),
-                        alpha=0.5)
-        for i, value in enumerate(valid_configs):
-            legend_elements.append(
-                Line2D([0], [0], marker='o', color='w', label=f'Test outliers ({config_name}={value})',
-                       markerfacecolor=colors[i], markersize=10))
-
-    plt.legend(handles=legend_elements, loc="upper left", bbox_to_anchor=(1, 1))
-    plt.xlabel('UMAP 1')
-    plt.ylabel('UMAP 2')
-    plt.title('UMAP Visualization of Embeddings')
-    plt.tight_layout()
-    plt.savefig(f'logs/training/{trail}/{fixed_config}_inlier{inlier}_test{test}_UMAP.pdf', bbox_inches='tight')
-    plt.close()
-
-def visualize_Isomap(train_inlier, valid_inlier, train_augs, valid_augs, train_configs, valid_configs, config_name,
-                   fixed_config, trail, inlier=True, test=True, converse=1):
-    train_aug = torch.cat(train_augs, dim=0)
-    if test is True:
-        valid_aug = torch.cat(valid_augs, dim=0)
-        aug = torch.cat([train_aug, valid_aug], dim=0)
-    else:
-        aug = torch.cat(train_augs, dim=0)
-
-    if inlier is True:
-        all_data = torch.cat([train_inlier, valid_inlier, aug], dim=0).to('cpu').numpy()
-        inlier_size = len(train_inlier) + len(valid_inlier)
-    else:
-        all_data = torch.cat([aug], dim=0).to('cpu').numpy()
-        inlier_size = 0
-
-    xt = Isomap(n_components=2).fit_transform(all_data)
-    if config_name == 'level':
-        plt.figure(figsize=(12, 10))
-    elif config_name == 'length':
-        plt.figure(figsize=(12, 8))
-    else:
-        raise Exception('Unsupported config_name.')
-    
-    if inlier is True:
-        # train inliers
-        plt.scatter(xt[:len(train_inlier), 0], xt[:len(train_inlier), 1], c='b', alpha=0.5)
-        # test inliers
-        plt.scatter(xt[len(train_inlier):len(train_inlier) + len(valid_inlier), 0],
-                    xt[len(train_inlier):len(train_inlier) + len(valid_inlier), 1], c='g', alpha=0.5)
-
-    cmap = cm.get_cmap('Greys') if test else cm.get_cmap('Reds')
-    normalized_values = ([0.5] if len(train_configs) == 1 else
-                         (train_configs - np.min(train_configs)) / (np.max(train_configs) - np.min(train_configs)) * 0.9 + 0.1)
-    colors = [cmap(val) for val in normalized_values]
-    for i, value in enumerate(train_configs):
-        start_idx = inlier_size + i * len(train_augs[i])
-        end_idx = start_idx + len(train_augs[i])
-        plt.scatter(xt[start_idx:end_idx, 0], xt[start_idx:end_idx, 1], c=[colors[i]] * (end_idx - start_idx), alpha=0.5)
-    
-    legend_elements = []
-    if inlier:
-        legend_elements.extend([
-            Line2D([0], [0], marker='o', color='w', label='Train inliers', markerfacecolor='b', markersize=10),
-            Line2D([0], [0], marker='o', color='w', label='Test inliers', markerfacecolor='g', markersize=10)
-        ])
-    for i, value in enumerate(train_configs):
-        legend_elements.append(Line2D([0], [0], marker='o', color='w', label=f'Train outliers ({config_name}={value})',
-                                      markerfacecolor=colors[i], markersize=10))
-    
-    if test:
-        cmap = cm.get_cmap('Reds')
-        normalized_values = ([0.5] if len(valid_configs) == 1 else
-                             (valid_configs - np.min(valid_configs)) / (np.max(valid_configs) - np.min(valid_configs)) * 0.9 + 0.1)
-        colors = [cmap(val) for val in normalized_values]
-        for i, value in enumerate(valid_configs):
-            start_idx = inlier_size + len(train_aug) + i * len(valid_augs[i])
-            end_idx = start_idx + len(valid_augs[i])
-            plt.scatter(xt[start_idx:end_idx, 0], xt[start_idx:end_idx, 1], c=[colors[i]] * (end_idx - start_idx), alpha=0.5)
-        for i, value in enumerate(valid_configs):
-            legend_elements.append(Line2D([0], [0], marker='o', color='w', label=f'Test outliers ({config_name}={value})',
-                                          markerfacecolor=colors[i], markersize=10))
-
-    plt.legend(handles=legend_elements, loc='upper left', bbox_to_anchor=(1, 1))
-    plt.xlabel('Isomap 1')
-    plt.ylabel('Isomap 2')
-    plt.title('Isomap Visualization of Embeddings')
-    plt.tight_layout()
-    plt.savefig(f'logs/training/{trail}/{fixed_config}_inlier{inlier}_test{test}.pdf', bbox_inches='tight')
+    # plt.savefig(f'logs/training/{trail}/{fixed_config}_inlier{inlier}_test{test}.pdf', bbox_inches='tight')
+    plt.savefig(f'logs/training/{trail}/{fixed_config}_test{test}_{tool}.pdf', bbox_inches='tight')
     plt.close()
