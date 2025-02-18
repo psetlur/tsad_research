@@ -6,24 +6,26 @@ import ast
 # trail = 'fixed'
 # trail = 'grid'
 # trail = 'more_epochs'
-trail = 'loss_length_tau'
-# trail = 'more_negative'
-
-skip = 100
+# trail = 'second_loss'
+# trail = 'length_optimized'
+trail = 'more_negative'
 
 
 def plot_loss_curve(last=False):
     df = pd.read_csv(f'logs/training/{trail}/metrics.csv').dropna(subset=["val_loss"])
     if last is True:
-        df = df.tail(300)
+        df = df.tail(100)
+        skip = 20
+    else:
+        skip = 100
     epoch = df["epoch"]
     plt.figure(figsize=(6, 4))
     plt.plot(epoch, df["loss_global"], marker="s", markersize=10, markerfacecolor='none', linestyle="-",
-             markeredgecolor="red", color="red", label=f"First Loss", markevery=skip)
+             markeredgecolor="red", color="red", label=f"Outlier-Outlier", markevery=skip)
     plt.plot(epoch, df["loss_local"], marker="^", markersize=10, markerfacecolor='none', linestyle="-",
-             markeredgecolor="blue", color="blue", label=f"Second Loss", markevery=skip)
+             markeredgecolor="blue", color="blue", label=f"Continuous-HP", markevery=skip)
     plt.plot(epoch, df["loss_normal"], marker="v", markersize=10, markerfacecolor='none', linestyle="-",
-             markeredgecolor="green", color="green", label=f"Third Loss", markevery=skip)
+             markeredgecolor="green", color="green", label=f"Inlier-Outlier", markevery=skip)
     plt.plot(epoch, df["val_loss"], marker="o", markersize=10, markerfacecolor='none', linestyle="-",
              markeredgecolor="black", color="black", label=f"Overall Loss", markevery=skip)
     plt.xticks(np.arange(epoch.iloc[0], epoch.iloc[-1], skip))
@@ -81,8 +83,8 @@ def plot_wd_f1score():
         plt.xticks(configs, rotation=90)
         plt.yticks(configs)
         plt.colorbar(label='Value')
-        plt.xlabel(config_name)
-        plt.ylabel(config_name)
+        plt.xlabel(f'train_{config_name}')
+        plt.ylabel(f'test_{config_name}')
         plt.title(title)
         handles, labels = plt.gca().get_legend_handles_labels()
         by_label = dict(zip(labels, handles))
@@ -100,4 +102,4 @@ def plot_wd_f1score():
 if __name__ == "__main__":
     plot_loss_curve(last=False)
     plot_loss_curve(last=True)
-    plot_wd_f1score()
+    # plot_wd_f1score()

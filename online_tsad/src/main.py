@@ -40,9 +40,9 @@ if __name__ == "__main__":
     # parser.add_argument("--trail", type=str, default='fixed')
     # parser.add_argument("--trail", type=str, default='grid')
     # parser.add_argument("--trail", type=str, default='more_epochs')
-    # parser.add_argument("--trail", type=str, default='loss_length_tau')
-    # parser.add_argument("--trail", type=str, default='more_negative')
-    parser.add_argument("--trail", type=str, default='warmup')
+    # parser.add_argument("--trail", type=str, default='second_loss')
+    # parser.add_argument("--trail", type=str, default='length_optimized')
+    parser.add_argument("--trail", type=str, default='more_negative')
     # parser.add_argument("--device", type=str, default='cpu')
     parser.add_argument("--device", type=str, default='cuda:0')
     parser.add_argument(
@@ -99,18 +99,18 @@ if __name__ == "__main__":
     # num_iterations = 5
     # for iteration in range(num_iterations):
     model = train_model(args, m_config, train_dataloader, trainval_dataloader, best_point)
-    wd, f1score = black_box_function(args, model, train_dataloader, val_dataloader, test_dataloader, best_point)
-    # print(colored("Ground truth point:", 'blue'), best_point)
-    # print(colored(f"Iteration {iteration + 1} - Target Value:", 'blue'), target)
-    # print(colored(f"Iteration {iteration + 1} - F1-Score   :", 'blue'), f1score)
-    print(colored(f"WD:", 'blue'), wd)
-    print(colored(f"F1-Score:", 'blue'), f1score)
-    print()
-    if len(wd) != 0 or len(f1score) != 0:
-        with open(f'logs/training/{args.trail}/wd_f1score.txt', 'w') as file:
-            file.write('wd: ' + str(wd))
-            file.write("\n")
-            file.write('f1score: ' + str(f1score))
+    # wd, f1score = black_box_function(args, model, train_dataloader, val_dataloader, test_dataloader, best_point)
+    # # print(colored("Ground truth point:", 'blue'), best_point)
+    # # print(colored(f"Iteration {iteration + 1} - Target Value:", 'blue'), target)
+    # # print(colored(f"Iteration {iteration + 1} - F1-Score   :", 'blue'), f1score)
+    # print(colored(f"WD:", 'blue'), wd)
+    # print(colored(f"F1-Score:", 'blue'), f1score)
+    # print()
+    # if len(wd) != 0 or len(f1score) != 0:
+    #     with open(f'logs/training/{args.trail}/wd_f1score.txt', 'w') as file:
+    #         file.write('wd: ' + str(wd))
+    #         file.write("\n")
+    #         file.write('f1score: ' + str(f1score))
 
     # acquisition_function = UpperConfidenceBound(kappa=0.1)
     # optimizer = BayesianOptimization(
@@ -128,7 +128,7 @@ if __name__ == "__main__":
 
     #     if iter < number_of_random_search:
     #         next_point_to_probe = {k: np.round(np.random.uniform(v[0], v[1]), 3) for k, v in pbounds.items()}
-    #     else:    
+    #     else:
     #         next_point_to_probe = {k: np.round(v, 3) for k, v in optimizer.suggest().items()}
     #     print("Next point to probe is:", next_point_to_probe)
 

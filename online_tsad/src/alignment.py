@@ -312,6 +312,7 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
                       valid_augs=z_valid_level_aug, train_configs=train_levels, valid_configs=valid_levels,
                       config_name='level', fixed_config=f'fixed_length{fixed_length}', trail=args.trail, test=True,
                       tool='isomap')
+
             # # with test
             # visualize(train_inlier=z_train, valid_inlier=z_valid, train_augs=z_train_level_aug,
             #           valid_augs=z_valid_level_aug, train_configs=train_levels, valid_configs=valid_levels,
