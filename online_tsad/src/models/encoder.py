@@ -65,7 +65,8 @@ class Encoder(pl.LightningModule):
 
         self.encoder = CNNEncoder(ts_input_size)
         self.lr = lr
-        self.info_loss = InfoNCE(negative_mode='unpaired')
+        self.temperature = 0.1
+        self.info_loss = InfoNCE(negative_mode='unpaired', temperature=self.temperature)
 
         self.normal_idx = set()
         self.normal_x = torch.tensor([]).to(device)
@@ -95,7 +96,7 @@ class Encoder(pl.LightningModule):
 
         y, y_pos = x.clone(), x.clone()
         meta, meta_pos = list(), list()
-        if self.args.trail == 'more_negative':
+        if self.args.trail in ['more_negative', 'warmup']:
             y_neg = [x.clone() for _ in range(NUM_NEGATIVE)]
             meta_neg = [list() for _ in range(NUM_NEGATIVE)]
         elif self.args.trail in ['fixed', 'grid', 'more_epochs', 'second_loss', 'length_optimized']:
@@ -122,7 +123,7 @@ class Encoder(pl.LightningModule):
                 s0 = min(s0, 1.0)
                 s2 = max(m[2] + np.random.uniform(low=-TAU_LENGTH, high=TAU_LENGTH), 0.20)
                 s2 = min(s2, 0.50)
-            elif self.args.trail == 'more_negative':
+            elif self.args.trail in ['more_negative', 'warmup']:
                 s0 = m[0] + np.random.uniform(low=-TAU_LEVEL, high=TAU_LEVEL)
                 s2 = max(m[2] + np.random.uniform(low=-TAU_LENGTH, high=TAU_LENGTH), 0)
             else:
@@ -140,20 +141,24 @@ class Encoder(pl.LightningModule):
                             (m[0] + 1.0) / 2.0) else np.random.uniform(low=m[0] + TAU_LEVEL, high=1.0)
                     s2_neg = np.random.uniform(low=0.20, high=m[2] - TAU_LENGTH) if np.random.random() < (
                             (m[2] - 0.20) / 0.30) else np.random.uniform(low=m[2] + TAU_LENGTH, high=0.50)
-                elif self.args.trail == 'more_negative':
+                    y_neg[i][0] = self.inject_platform(y_neg[i][0], s0_neg, s1_neg, s2_neg)
+                    meta_neg.append([s0_neg, s1_neg, s2_neg])
+                elif self.args.trail in ['more_negative', 'warmup']:
                     s0_neg = m[0] + np.random.uniform(low=-RANGE_LEVEL, high=-TAU_LEVEL) \
                         if np.random.random() > 0.5 else m[0] + np.random.uniform(low=TAU_LEVEL, high=RANGE_LEVEL)
                     s2_neg = max(m[2] + np.random.uniform(low=-RANGE_LENGTH, high=-TAU_LENGTH)
                                  if np.random.random() > 0.5 else
                                  m[2] + np.random.uniform(low=TAU_LENGTH, high=RANGE_LENGTH), 0)
+                    y_neg[neg_index][i][0] = self.inject_platform(y_neg[neg_index][i][0], s0_neg, s1_neg, s2_neg)
+                    meta_neg[neg_index].append([s0_neg, s1_neg, s2_neg])
+                    neg_index += 1
                 else:
                     s0_neg = m[0] + np.random.uniform(low=-RANGE, high=-TAU) \
                         if np.random.random() > 0.5 else m[0] + np.random.uniform(low=TAU, high=RANGE)
                     s2_neg = max(m[2] + np.random.uniform(low=-RANGE, high=-TAU) \
                                      if np.random.random() > 0.5 else m[2] + np.random.uniform(low=TAU, high=RANGE), 0)
-                y_neg[neg_index][i][0] = self.inject_platform(y_neg[neg_index][i][0], s0_neg, s1_neg, s2_neg)
-                meta_neg[neg_index].append([s0_neg, s1_neg, s2_neg])
-                neg_index += 1
+                    y_neg[i][0] = self.inject_platform(y_neg[i][0], s0_neg, s1_neg, s2_neg)
+                    meta_neg.append([s0_neg, s1_neg, s2_neg])
 
                 if neg_index >= NUM_NEGATIVE or self.args.trail in ['fixed', 'grid', 'more_epochs', 'second_loss',
                                                                     'length_optimized']:
@@ -162,7 +167,7 @@ class Encoder(pl.LightningModule):
         outputs = self(torch.cat([x, y, y_pos, x_pos], dim=0))
         c_x, c_y, c_y_pos, c_x_pos = torch.split(outputs, x.shape[0], dim=0)
 
-        if self.args.trail == 'more_negative':
+        if self.args.trail in ['more_negative', 'warmup']:
             c_y_neg = [self(y_neg[i]) for i in range(NUM_NEGATIVE)]
         else:
             c_y_neg = self(y_neg)
@@ -173,32 +178,35 @@ class Encoder(pl.LightningModule):
         ### Anomalies with far away hyperparameters should be far away propotional to delta.
         if self.args.trail in ['second_loss', 'length_optimized']:
             loss_local = self.info_loss(c_y, c_y_pos, c_y_neg)
-        elif self.args.trail == 'more_negative':
-            loss_local = sum([hard_negative_loss(c_y, c_y_pos, c_y_neg[i], np.array(meta), np.array(meta_neg[i]))
-                              for i in range(NUM_NEGATIVE)]) / NUM_NEGATIVE
+        elif self.args.trail in ['more_negative', 'warmup']:
+            loss_local = sum([hard_negative_loss(
+                c_y, c_y_pos, c_y_neg[i], np.array(meta), np.array(meta_neg[i]),
+                temperature=self.temperature) for i in range(NUM_NEGATIVE)]) / NUM_NEGATIVE
         else:
-            loss_local = hard_negative_loss(c_y, c_y_pos, c_y_neg, np.array(meta), np.array(meta_neg))
+            loss_local = hard_negative_loss(c_y, c_y_pos, c_y_neg, np.array(meta), np.array(meta_neg),
+                                            temperature=self.temperature)
 
         ### Nomral should be close to each other, and far away from anomalies.
-        if self.args.trail == 'more_negative':
+        if self.args.trail in ['more_negative', 'warmup']:
             c_y_neg = torch.cat(c_y_neg, dim=0)
         loss_normal = self.info_loss(c_x, c_x_pos, torch.cat([c_y, c_y_pos, c_y_neg], dim=0))
 
-        loss = loss_global + loss_local + loss_normal
-
-        # if self.current_epoch < 30:
-        #     weight_normal = 1.0
-        #     weight_global = 0.01
-        #     weight_local = 0.001
-        # elif self.current_epoch < 60:
-        #     weight_normal = 1.0
-        #     weight_global = 1.0
-        #     weight_local = 0.01
-        # else:
-        #     weight_normal = 1.0
-        #     weight_global = 1.0
-        #     weight_local = 1.0
-        # loss = weight_global * loss_global + weight_local * loss_local + weight_normal * loss_normal
+        if self.args.trail == 'warmup':
+            if self.current_epoch < 30:
+                weight_normal = 1.0
+                weight_global = 0.01
+                weight_local = 0.001
+            elif self.current_epoch < 60:
+                weight_normal = 1.0
+                weight_global = 1.0
+                weight_local = 0.01
+            else:
+                weight_normal = 1.0
+                weight_global = 1.0
+                weight_local = 1.0
+            loss = weight_global * loss_global + weight_local * loss_local + weight_normal * loss_normal
+        else:
+            loss = loss_global + loss_local + loss_normal
 
         if loss_global > 0:
             pass
@@ -224,7 +232,7 @@ class Encoder(pl.LightningModule):
 
         y, y_pos = x.clone(), x.clone()
         meta, meta_pos = list(), list()
-        if self.args.trail == 'more_negative':
+        if self.args.trail in ['more_negative', 'warmup']:
             y_neg = [x.clone() for _ in range(NUM_NEGATIVE)]
             meta_neg = [list() for _ in range(NUM_NEGATIVE)]
         elif self.args.trail in ['fixed', 'grid', 'more_epochs', 'second_loss', 'length_optimized']:
@@ -251,7 +259,7 @@ class Encoder(pl.LightningModule):
                 s0 = min(s0, 1.0)
                 s2 = max(m[2] + np.random.uniform(low=-TAU_LENGTH, high=TAU_LENGTH), 0.20)
                 s2 = min(s2, 0.50)
-            elif self.args.trail == 'more_negative':
+            elif self.args.trail in ['more_negative', 'warmup']:
                 s0 = m[0] + np.random.uniform(low=-TAU_LEVEL, high=TAU_LEVEL)
                 s2 = max(m[2] + np.random.uniform(low=-TAU_LENGTH, high=TAU_LENGTH), 0)
             else:
@@ -269,20 +277,24 @@ class Encoder(pl.LightningModule):
                             (m[0] + 1.0) / 2.0) else np.random.uniform(low=m[0] + TAU_LEVEL, high=1.0)
                     s2_neg = np.random.uniform(low=0.20, high=m[2] - TAU_LENGTH) if np.random.random() < (
                             (m[2] - 0.20) / 0.30) else np.random.uniform(low=m[2] + TAU_LENGTH, high=0.50)
-                elif self.args.trail == 'more_negative':
+                    y_neg[i][0] = self.inject_platform(y_neg[i][0], s0_neg, s1_neg, s2_neg)
+                    meta_neg.append([s0_neg, s1_neg, s2_neg])
+                elif self.args.trail in ['more_negative', 'warmup']:
                     s0_neg = m[0] + np.random.uniform(low=-RANGE_LEVEL, high=-TAU_LEVEL) \
                         if np.random.random() > 0.5 else m[0] + np.random.uniform(low=TAU_LEVEL, high=RANGE_LEVEL)
                     s2_neg = max(m[2] + np.random.uniform(low=-RANGE_LENGTH, high=-TAU_LENGTH)
                                  if np.random.random() > 0.5 else
                                  m[2] + np.random.uniform(low=TAU_LENGTH, high=RANGE_LENGTH), 0)
+                    y_neg[neg_index][i][0] = self.inject_platform(y_neg[neg_index][i][0], s0_neg, s1_neg, s2_neg)
+                    meta_neg[neg_index].append([s0_neg, s1_neg, s2_neg])
+                    neg_index += 1
                 else:
                     s0_neg = m[0] + np.random.uniform(low=-RANGE, high=-TAU) \
                         if np.random.random() > 0.5 else m[0] + np.random.uniform(low=TAU, high=RANGE)
                     s2_neg = max(m[2] + np.random.uniform(low=-RANGE, high=-TAU) \
                                      if np.random.random() > 0.5 else m[2] + np.random.uniform(low=TAU, high=RANGE), 0)
-                y_neg[neg_index][i][0] = self.inject_platform(y_neg[neg_index][i][0], s0_neg, s1_neg, s2_neg)
-                meta_neg[neg_index].append([s0_neg, s1_neg, s2_neg])
-                neg_index += 1
+                    y_neg[i][0] = self.inject_platform(y_neg[i][0], s0_neg, s1_neg, s2_neg)
+                    meta_neg.append([s0_neg, s1_neg, s2_neg])
 
                 if neg_index >= NUM_NEGATIVE or self.args.trail in ['fixed', 'grid', 'more_epochs', 'second_loss',
                                                                     'length_optimized']:
@@ -291,7 +303,7 @@ class Encoder(pl.LightningModule):
         outputs = self(torch.cat([x, y, y_pos, x_pos], dim=0))
         c_x, c_y, c_y_pos, c_x_pos = torch.split(outputs, x.shape[0], dim=0)
 
-        if self.args.trail == 'more_negative':
+        if self.args.trail in ['more_negative', 'warmup']:
             c_y_neg = [self(y_neg[i]) for i in range(NUM_NEGATIVE)]
         else:
             c_y_neg = self(y_neg)
@@ -300,17 +312,34 @@ class Encoder(pl.LightningModule):
 
         if self.args.trail in ['second_loss', 'length_optimized']:
             loss_local = self.info_loss(c_y, c_y_pos, c_y_neg)
-        elif self.args.trail == 'more_negative':
-            loss_local = sum([hard_negative_loss(c_y, c_y_pos, c_y_neg[i], np.array(meta), np.array(meta_neg[i]))
-                              for i in range(NUM_NEGATIVE)]) / NUM_NEGATIVE
+        elif self.args.trail in ['more_negative', 'warmup']:
+            loss_local = sum([hard_negative_loss(
+                c_y, c_y_pos, c_y_neg[i], np.array(meta), np.array(meta_neg[i]),
+                temperature=self.temperature) for i in range(NUM_NEGATIVE)]) / NUM_NEGATIVE
         else:
-            loss_local = hard_negative_loss(c_y, c_y_pos, c_y_neg, np.array(meta), np.array(meta_neg))
+            loss_local = hard_negative_loss(c_y, c_y_pos, c_y_neg, np.array(meta), np.array(meta_neg),
+                                            temperature=self.temperature)
 
-        if self.args.trail == 'more_negative':
+        if self.args.trail in ['more_negative', 'warmup']:
             c_y_neg = torch.cat(c_y_neg, dim=0)
         loss_normal = self.info_loss(c_x, c_x_pos, torch.cat([c_y, c_y_pos, c_y_neg], dim=0))
 
-        loss = loss_global + loss_local + loss_normal
+        if self.args.trail == 'warmup':
+            if self.current_epoch < 30:
+                weight_normal = 1.0
+                weight_global = 0.01
+                weight_local = 0.001
+            elif self.current_epoch < 60:
+                weight_normal = 1.0
+                weight_global = 1.0
+                weight_local = 0.01
+            else:
+                weight_normal = 1.0
+                weight_global = 1.0
+                weight_local = 1.0
+            loss = weight_global * loss_global + weight_local * loss_local + weight_normal * loss_normal
+        else:
+            loss = loss_global + loss_local + loss_normal
 
         self.log("loss_global", loss_global, prog_bar=True)
         self.log("loss_local", loss_local, prog_bar=True)

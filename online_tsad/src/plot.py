@@ -6,9 +6,10 @@ import ast
 # trail = 'fixed'
 # trail = 'grid'
 # trail = 'more_epochs'
-# trail = 'second_loss'
+trail = 'second_loss'
 # trail = 'length_optimized'
-trail = 'more_negative'
+# trail = 'more_negative'
+# trail = 'warmup'
 
 
 def plot_loss_curve(last=False):
@@ -102,4 +103,4 @@ def plot_wd_f1score():
 if __name__ == "__main__":
     plot_loss_curve(last=False)
     plot_loss_curve(last=True)
-    # plot_wd_f1score()
+    plot_wd_f1score()

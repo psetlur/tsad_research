@@ -237,15 +237,15 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
                 length_x_aug in x_valid_length_aug]
 
             z_aug = model(torch.tensor(np.array(x_aug)).float().unsqueeze(1).to(args.device)).detach()
-            # z_train_t, z_valid_t, z_aug_t = emb(z_train[train_inlier_index].clone().squeeze(),
-            #                                     z_valid[valid_inlier_index].clone().squeeze(),
-            #                                     z_aug.clone().squeeze())
-            # z_train_level_aug_t = [emb.normalize(z_aug) for z_aug in z_train_level_aug]
-            # z_train_length_aug_t = [emb.normalize(z_aug) for z_aug in z_train_length_aug]
-            # z_valid_level_aug_t = [emb.normalize(z_aug) for z_aug in z_valid_level_aug]
-            # z_valid_length_aug_t = [emb.normalize(z_aug) for z_aug in z_valid_length_aug]
-            #
-            # W_loss = geomloss.SamplesLoss("sinkhorn", p=2, blur=0.05, scaling=0.9)
+            z_train_t, z_valid_t, z_aug_t = emb(z_train[train_inlier_index].clone().squeeze(),
+                                                z_valid[valid_inlier_index].clone().squeeze(),
+                                                z_aug.clone().squeeze())
+            z_train_level_aug_t = [emb.normalize(z_aug) for z_aug in z_train_level_aug]
+            z_train_length_aug_t = [emb.normalize(z_aug) for z_aug in z_train_length_aug]
+            z_valid_level_aug_t = [emb.normalize(z_aug) for z_aug in z_valid_level_aug]
+            z_valid_length_aug_t = [emb.normalize(z_aug) for z_aug in z_valid_length_aug]
+
+            W_loss = geomloss.SamplesLoss("sinkhorn", p=2, blur=0.05, scaling=0.9)
 
             # loss = -W_loss(torch.cat([z_train_t, z_aug_t], dim=0), z_valid_t).item()
             # total_loss.append(loss)
@@ -300,40 +300,42 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
             #
             #         print(f'train_length: {train_length}, valid_length: {valid_length}, wd: {loss}, f1score: {f1}')
 
-            # visualize(train_inlier=z_train, valid_inlier=z_valid, train_augs=z_train_level_aug,
-            #           valid_augs=z_valid_level_aug, train_configs=train_levels, valid_configs=valid_levels,
-            #           config_name='level', fixed_config=f'fixed_length{fixed_length}', trail=args.trail, test=True,
-            #           tool='tsne')
-            # visualize(train_inlier=z_train, valid_inlier=z_valid, train_augs=z_train_level_aug,
-            #           valid_augs=z_valid_level_aug, train_configs=train_levels, valid_configs=valid_levels,
-            #           config_name='level', fixed_config=f'fixed_length{fixed_length}', trail=args.trail, test=True,
-            #           tool='umap')
-            visualize(train_inlier=z_train, valid_inlier=z_valid, train_augs=z_train_level_aug,
-                      valid_augs=z_valid_level_aug, train_configs=train_levels, valid_configs=valid_levels,
-                      config_name='level', fixed_config=f'fixed_length{fixed_length}', trail=args.trail, test=True,
-                      tool='isomap')
+            try:
+                # with test
+                visualize(train_inlier=z_train, valid_inlier=z_valid, train_augs=z_train_level_aug,
+                          valid_augs=z_valid_level_aug, train_configs=train_levels, valid_configs=valid_levels,
+                          config_name='level', fixed_config=f'fixed_length{fixed_length}', trail=args.trail, test=True)
+                visualize(train_inlier=z_train, valid_inlier=z_valid, train_augs=z_train_length_aug,
+                          valid_augs=z_valid_length_aug, train_configs=train_lengths, valid_configs=valid_lengths,
+                          config_name='length', fixed_config=f'fixed_level{fixed_level}', trail=args.trail, test=True)
 
-            # # with test
-            # visualize(train_inlier=z_train, valid_inlier=z_valid, train_augs=z_train_level_aug,
-            #           valid_augs=z_valid_level_aug, train_configs=train_levels, valid_configs=valid_levels,
-            #           config_name='level', fixed_config=f'fixed_length{fixed_length}', trail=args.trail,test=True)
-            # visualize(train_inlier=z_train, valid_inlier=z_valid, train_augs=z_train_length_aug,
-            #           valid_augs=z_valid_length_aug, train_configs=train_lengths, valid_configs=valid_lengths,
-            #           config_name='length', fixed_config=f'fixed_level{fixed_level}', trail=args.trail,test=True)
-            #
-            # # without test
-            # visualize(train_inlier=z_train, valid_inlier=z_valid, train_augs=z_train_level_aug,
-            #           valid_augs=None, train_configs=train_levels, valid_configs=None,
-            #           config_name='level', fixed_config=f'fixed_length{fixed_length}', trail=args.trail,test=False)
-            # visualize(train_inlier=z_train, valid_inlier=z_valid, train_augs=z_train_length_aug,
-            #           valid_augs=None, train_configs=train_lengths, valid_configs=None,
-            #           config_name='length', fixed_config=f'fixed_level{fixed_level}', trail=args.trail,test=False)
+                # without test
+                visualize(train_inlier=z_train, valid_inlier=z_valid, train_augs=z_train_level_aug,
+                          valid_augs=None, train_configs=train_levels, valid_configs=None,
+                          config_name='level', fixed_config=f'fixed_length{fixed_length}', trail=args.trail, test=False)
+                visualize(train_inlier=z_train, valid_inlier=z_valid, train_augs=z_train_length_aug,
+                          valid_augs=None, train_configs=train_lengths, valid_configs=None,
+                          config_name='length', fixed_config=f'fixed_level{fixed_level}', trail=args.trail, test=False)
 
+                visualize(train_inlier=z_train, valid_inlier=z_valid, train_augs=z_train_level_aug,
+                          valid_augs=z_valid_level_aug, train_configs=train_levels, valid_configs=valid_levels,
+                          config_name='level', fixed_config=f'fixed_length{fixed_length}', trail=args.trail, test=True,
+                          tool='umap')
+                visualize(train_inlier=z_train, valid_inlier=z_valid, train_augs=z_train_length_aug,
+                          valid_augs=z_valid_length_aug, train_configs=train_lengths, valid_configs=valid_lengths,
+                          config_name='length', fixed_config=f'fixed_level{fixed_level}', trail=args.trail, test=True,
+                          tool='umap')
+                # visualize(train_inlier=z_train, valid_inlier=z_valid, train_augs=z_train_level_aug,
+                #           valid_augs=z_valid_level_aug, train_configs=train_levels, valid_configs=valid_levels,
+                #           config_name='level', fixed_config=f'fixed_length{fixed_length}', trail=args.trail, test=True,
+                #           tool='isomap')
+            except:
+                pass
     return total_loss, f1score
 
 
 def visualize(train_inlier, valid_inlier, train_augs, valid_augs, train_configs, valid_configs, config_name,
-              fixed_config, trail, inlier=True, test=True, converse=1, tool='tsne'):
+              fixed_config, trail, inlier=True, test=True, converse=1, tool='tsne', ):
     train_aug = torch.cat(train_augs, dim=0)
     if test is True:
         valid_aug = torch.cat(valid_augs, dim=0)
@@ -372,6 +374,12 @@ def visualize(train_inlier, valid_inlier, train_augs, valid_augs, train_configs,
     # test inliers
     plt.scatter(xt[len(train_inlier):len(train_inlier) + len(valid_inlier), 0],
                 xt[len(train_inlier):len(train_inlier) + len(valid_inlier), 1], c='g', alpha=0.5)
+    legend_elements = list()
+    # if inlier is True:
+    legend_elements.append(
+        Line2D([0], [0], marker='o', color='w', label='Train inliers', markerfacecolor='b', markersize=10))
+    legend_elements.append(
+        Line2D([0], [0], marker='o', color='w', label='Test inliers', markerfacecolor='g', markersize=10))
 
     # train outliers
     if test is True:
@@ -389,25 +397,47 @@ def visualize(train_inlier, valid_inlier, train_augs, valid_augs, train_configs,
     for i, value in enumerate(train_configs):
         start_idx = inlier_size + i * len(train_augs[i])
         end_idx = start_idx + len(train_augs[i])
-        plt.scatter(xt[start_idx:end_idx, 0], xt[start_idx:end_idx, 1], c=[colors[i]] * (end_idx - start_idx),
-                    alpha=0.5)
+        if config_name == 'level' and value == 0:
+            plt.scatter(xt[start_idx:end_idx, 0], xt[start_idx:end_idx, 1], c='y', alpha=0.5)
+            legend_elements.append(
+                Line2D([0], [0], marker='o', color='w', label=f'Train outliers ({config_name}={value})',
+                       markerfacecolor='y', markersize=10))
+        else:
+            plt.scatter(xt[start_idx:end_idx, 0], xt[start_idx:end_idx, 1], c=[colors[i]] * (end_idx - start_idx),
+                        alpha=0.5)
+            legend_elements.append(
+                Line2D([0], [0], marker='o', color='w', label=f'Train outliers ({config_name}={value})',
+                       markerfacecolor=colors[i], markersize=10))
+
+        if len(train_configs) == 1:
+            normalized_values = [0.5]
+        else:
+            normalized_values = (train_configs - np.min(train_configs)) / (
+                        np.max(train_configs) - np.min(train_configs))
+            normalized_values = normalized_values * (1 - 0.1) + 0.1
+        colors = [cmap(val) for val in normalized_values]
+        for i, value in enumerate(train_configs):
+            start_idx = inlier_size + i * len(train_augs[i])
+            end_idx = start_idx + len(train_augs[i])
+            if config_name == 'level' and value == 0:
+                plt.scatter(xt[start_idx:end_idx, 0], xt[start_idx:end_idx, 1], c='y', alpha=0.5)
+                legend_elements.append(
+                    Line2D([0], [0], marker='o', color='w', label=f'Train outliers ({config_name}={value})',
+                           markerfacecolor='y', markersize=10))
+            else:
+                plt.scatter(xt[start_idx:end_idx, 0], xt[start_idx:end_idx, 1], c=[colors[i]] * (end_idx - start_idx),
+                            alpha=0.5)
+                legend_elements.append(
+                    Line2D([0], [0], marker='o', color='w', label=f'Train outliers ({config_name}={value})',
+                           markerfacecolor=colors[i], markersize=10))
         # if converse == 1:
         #     plt.scatter(xt[start_idx:end_idx, 0], xt[start_idx:end_idx, 1], c=[colors[i]] * (end_idx - start_idx),
         #                 alpha=0.5)
         # else:
         #     plt.scatter(xt[start_idx:end_idx, 0], xt[start_idx:end_idx, 1], c=[colors[i]] * (end_idx - start_idx),
         #                 alpha=0.5, zorder=len(train_configs) - i)
-    legend_elements = list()
-    # if inlier is True:
-    legend_elements.append(
-        Line2D([0], [0], marker='o', color='w', label='Train inliers', markerfacecolor='b', markersize=10))
-    legend_elements.append(
-        Line2D([0], [0], marker='o', color='w', label='Test inliers', markerfacecolor='g', markersize=10))
-    for i, value in enumerate(train_configs):
-        legend_elements.append(Line2D([0], [0], marker='o', color='w', label=f'Train outliers ({config_name}={value})',
-                                      markerfacecolor=colors[i], markersize=10))
 
-    # valid outliers
+    # test outliers
     if test is True:
         cmap = cm.get_cmap('Reds')
         if len(valid_configs) == 1:
@@ -420,18 +450,25 @@ def visualize(train_inlier, valid_inlier, train_augs, valid_augs, train_configs,
         for i, value in enumerate(valid_configs):
             start_idx = inlier_size + len(train_aug) + i * len(valid_augs[i])
             end_idx = start_idx + len(valid_augs[i])
-            plt.scatter(xt[start_idx:end_idx, 0], xt[start_idx:end_idx, 1], c=[colors[i]] * (end_idx - start_idx),
-                        alpha=0.5)
+            if config_name == 'level' and value == 0:
+                plt.scatter(xt[start_idx:end_idx, 0], xt[start_idx:end_idx, 1], c='c', alpha=0.5)
+                legend_elements.append(
+                    Line2D([0], [0], marker='o', color='w', label=f'Test outliers ({config_name}={value})',
+                           markerfacecolor='c', markersize=10))
+            else:
+                plt.scatter(xt[start_idx:end_idx, 0], xt[start_idx:end_idx, 1], c=[colors[i]] * (end_idx - start_idx),
+                            alpha=0.5)
+                legend_elements.append(
+                    Line2D([0], [0], marker='o', color='w', label=f'Test outliers ({config_name}={value})',
+                           markerfacecolor=colors[i], markersize=10))
+
             # if converse == 1:
             #     plt.scatter(xt[start_idx:end_idx, 0], xt[start_idx:end_idx, 1], c=[colors[i]] * (end_idx - start_idx),
             #                 alpha=0.5)
             # else:
             #     plt.scatter(xt[start_idx:end_idx, 0], xt[start_idx:end_idx, 1], c=[colors[i]] * (end_idx - start_idx),
             #                 alpha=0.5, zorder=len(valid_configs) - i)
-        for i, value in enumerate(valid_configs):
-            legend_elements.append(
-                Line2D([0], [0], marker='o', color='w', label=f'Test outliers ({config_name}={value})',
-                       markerfacecolor=colors[i], markersize=10))
+
 
     plt.legend(handles=legend_elements, loc="upper left", bbox_to_anchor=(1, 1))
 
