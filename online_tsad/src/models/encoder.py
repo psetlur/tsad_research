@@ -71,6 +71,14 @@ class Encoder(pl.LightningModule):
         self.normal_idx = set()
         self.normal_x = torch.tensor([]).to(device)
 
+        if self.args.trail == 'second_anomaly':
+            self.anomaly_types = ['platform', 'mean']
+        elif self.args.trail in ['fixed', 'grid', 'more_epochs', 'second_loss', 'length_optimized', 'more_negative',
+                                 'warmup']:
+            self.anomaly_types = ['platform']
+        else:
+            raise Exception('Unsupported trail.')
+
     def forward(self, x):
         x = self.encoder(x)
         return x
@@ -87,109 +95,153 @@ class Encoder(pl.LightningModule):
         ts_row[start: start + length] += float(level)
         return ts_row
 
-    def training_step(self, x, batch_idx):
-        self.normal_x = self.normal_x.to(device)
-        if batch_idx not in self.normal_idx:
-            self.normal_idx.add(batch_idx)
-            self.normal_x = torch.cat([self.normal_x, x], dim=0).to(device)
+    def inject(self, anomaly_type, ts, config):
+        if anomaly_type == 'platform':
+            return self.inject_platform(ts, *config)
+        elif anomaly_type == 'mean':
+            return self.inject_mean(ts, *config)
+        else:
+            raise Exception('Unsupported anomaly_type.')
+
+    def main_process(self, x, process):
         x_pos = self.normal_x[np.random.choice(len(self.normal_x), x.shape[0])]
-
-        y, y_pos = x.clone(), x.clone()
-        meta, meta_pos = list(), list()
-        if self.args.trail in ['more_negative', 'warmup']:
-            y_neg = [x.clone() for _ in range(NUM_NEGATIVE)]
-            meta_neg = [list() for _ in range(NUM_NEGATIVE)]
-        elif self.args.trail in ['fixed', 'grid', 'more_epochs', 'second_loss', 'length_optimized']:
-            y_neg = x.clone()
-            meta_neg = list()
-        else:
-            raise Exception('Unsupported trail.')
-
-        for i in range(len(x)):
-            ### Platform anomaly
-            # m = [hist_sample(level_0_cdf, LEVEL_BINS), np.random.uniform(0, 0.5), hist_sample(length_0_cdf, LENGTH_BINS)]
-            if self.args.trail == 'fixed':
-                m = [FIXED_LEVEL, np.random.uniform(0, 0.5), FIXED_LENGTH]
+        c_x = self(x)
+        c_x_pos = self(x_pos)
+        c_y_dict, c_y_pos_dict, c_y_neg_dict, meta_dict, meta_neg_dict = dict(), dict(), dict(), dict(), dict()
+        for anomaly_type in self.anomaly_types:
+            y, y_pos = x.clone(), x.clone()
+            meta, meta_pos = list(), list()
+            if self.args.trail in ['more_negative', 'warmup', 'second_anomaly']:
+                y_neg = [x.clone() for _ in range(NUM_NEGATIVE)]
+                meta_neg = [list() for _ in range(NUM_NEGATIVE)]
+            elif self.args.trail in ['fixed', 'grid', 'more_epochs', 'second_loss', 'length_optimized']:
+                y_neg = x.clone()
+                meta_neg = list()
             else:
-                m = [config_from_grid(CDF_LEVEL, GRID_LEVEL), np.random.uniform(0, 0.5),
-                     config_from_grid(CDF_LENGTH, GRID_LENGTH)]
-            y[i][0] = self.inject_platform(y[i][0], *m)
-            meta.append(m)
+                raise Exception('Unsupported trail.')
 
-            # positive samples
-            s1 = np.random.uniform(0, 0.5)
-            if self.args.trail == 'length_optimized':
-                s0 = max(m[0] + np.random.uniform(low=-TAU_LEVEL, high=TAU_LEVEL), -1.0)
-                s0 = min(s0, 1.0)
-                s2 = max(m[2] + np.random.uniform(low=-TAU_LENGTH, high=TAU_LENGTH), 0.20)
-                s2 = min(s2, 0.50)
-            elif self.args.trail in ['more_negative', 'warmup']:
-                s0 = m[0] + np.random.uniform(low=-TAU_LEVEL, high=TAU_LEVEL)
-                s2 = max(m[2] + np.random.uniform(low=-TAU_LENGTH, high=TAU_LENGTH), 0)
-            else:
-                s0 = m[0] + np.random.uniform(low=-TAU, high=TAU)
-                s2 = max(m[2] + np.random.uniform(low=-TAU, high=TAU), 0)
-            y_pos[i][0] = self.inject_platform(y_pos[i][0], s0, s1, s2)
-            meta_pos.append([s0, s1, s2])
-
-            # negative samples
-            neg_index = 0
-            while True:
-                s1_neg = np.random.uniform(0, 0.5)
-                if self.args.trail == 'length_optimized':
-                    s0_neg = np.random.uniform(low=-1.0, high=m[0] - TAU_LEVEL) if np.random.random() < (
-                            (m[0] + 1.0) / 2.0) else np.random.uniform(low=m[0] + TAU_LEVEL, high=1.0)
-                    s2_neg = np.random.uniform(low=0.20, high=m[2] - TAU_LENGTH) if np.random.random() < (
-                            (m[2] - 0.20) / 0.30) else np.random.uniform(low=m[2] + TAU_LENGTH, high=0.50)
-                    y_neg[i][0] = self.inject_platform(y_neg[i][0], s0_neg, s1_neg, s2_neg)
-                    meta_neg.append([s0_neg, s1_neg, s2_neg])
-                elif self.args.trail in ['more_negative', 'warmup']:
-                    s0_neg = m[0] + np.random.uniform(low=-RANGE_LEVEL, high=-TAU_LEVEL) \
-                        if np.random.random() > 0.5 else m[0] + np.random.uniform(low=TAU_LEVEL, high=RANGE_LEVEL)
-                    s2_neg = max(m[2] + np.random.uniform(low=-RANGE_LENGTH, high=-TAU_LENGTH)
-                                 if np.random.random() > 0.5 else
-                                 m[2] + np.random.uniform(low=TAU_LENGTH, high=RANGE_LENGTH), 0)
-                    y_neg[neg_index][i][0] = self.inject_platform(y_neg[neg_index][i][0], s0_neg, s1_neg, s2_neg)
-                    meta_neg[neg_index].append([s0_neg, s1_neg, s2_neg])
-                    neg_index += 1
+            for i in range(len(x)):
+                # m = [hist_sample(level_0_cdf, LEVEL_BINS), np.random.uniform(0, 0.5), hist_sample(length_0_cdf, LENGTH_BINS)]
+                if self.args.trail == 'fixed':
+                    m = [FIXED_LEVEL, np.random.uniform(0, 0.5), FIXED_LENGTH]
+                elif self.args.trail in ['grid', 'more_epochs', 'second_loss', 'more_negative', 'warmup',
+                                         'length_optimized', 'second_anomaly']:
+                    m = [config_from_grid(CDF_LEVEL, GRID_LEVEL), np.random.uniform(0, 0.5),
+                         config_from_grid(CDF_LENGTH, GRID_LENGTH)]
                 else:
-                    s0_neg = m[0] + np.random.uniform(low=-RANGE, high=-TAU) \
-                        if np.random.random() > 0.5 else m[0] + np.random.uniform(low=TAU, high=RANGE)
-                    s2_neg = max(m[2] + np.random.uniform(low=-RANGE, high=-TAU) \
-                                     if np.random.random() > 0.5 else m[2] + np.random.uniform(low=TAU, high=RANGE), 0)
-                    y_neg[i][0] = self.inject_platform(y_neg[i][0], s0_neg, s1_neg, s2_neg)
-                    meta_neg.append([s0_neg, s1_neg, s2_neg])
+                    raise Exception('Unsupported trail.')
+                y[i][0] = self.inject(anomaly_type=anomaly_type, ts=y[i][0], config=m)
+                meta.append(m)
 
-                if neg_index >= NUM_NEGATIVE or self.args.trail in ['fixed', 'grid', 'more_epochs', 'second_loss',
-                                                                    'length_optimized']:
-                    break
+                # positive samples
+                s1 = np.random.uniform(0, 0.5)
+                if self.args.trail == 'length_optimized':
+                    s0 = max(m[0] + np.random.uniform(low=-TAU_LEVEL, high=TAU_LEVEL), -1.0)
+                    s0 = min(s0, 1.0)
+                    s2 = max(m[2] + np.random.uniform(low=-TAU_LENGTH, high=TAU_LENGTH), 0.20)
+                    s2 = min(s2, 0.50)
+                elif self.args.trail in ['more_negative', 'warmup', 'second_anomaly']:
+                    s0 = m[0] + np.random.uniform(low=-TAU_LEVEL, high=TAU_LEVEL)
+                    s2 = max(m[2] + np.random.uniform(low=-TAU_LENGTH, high=TAU_LENGTH), 0)
+                elif self.args.trail in ['fixed', 'grid', 'more_epochs', 'second_loss']:
+                    s0 = m[0] + np.random.uniform(low=-TAU, high=TAU)
+                    s2 = max(m[2] + np.random.uniform(low=-TAU, high=TAU), 0)
+                else:
+                    raise Exception('Unsupported trail.')
+                y_pos[i][0] = self.inject_platform(y_pos[i][0], s0, s1, s2)
+                meta_pos.append([s0, s1, s2])
 
-        outputs = self(torch.cat([x, y, y_pos, x_pos], dim=0))
-        c_x, c_y, c_y_pos, c_x_pos = torch.split(outputs, x.shape[0], dim=0)
+                # negative samples
+                neg_index = 0
+                while True:
+                    s1_neg = np.random.uniform(0, 0.5)
+                    if self.args.trail == 'length_optimized':
+                        s0_neg = np.random.uniform(low=-1.0, high=m[0] - TAU_LEVEL) if np.random.random() < (
+                                (m[0] + 1.0) / 2.0) else np.random.uniform(low=m[0] + TAU_LEVEL, high=1.0)
+                        s2_neg = np.random.uniform(low=0.20, high=m[2] - TAU_LENGTH) if np.random.random() < (
+                                (m[2] - 0.20) / 0.30) else np.random.uniform(low=m[2] + TAU_LENGTH, high=0.50)
+                        y_neg[i][0] = self.inject_platform(y_neg[i][0], s0_neg, s1_neg, s2_neg)
+                        meta_neg.append([s0_neg, s1_neg, s2_neg])
+                    elif self.args.trail in ['more_negative', 'warmup', 'second_anomaly']:
+                        s0_neg = m[0] + np.random.uniform(low=-RANGE_LEVEL, high=-TAU_LEVEL) \
+                            if np.random.random() > 0.5 else m[0] + np.random.uniform(low=TAU_LEVEL, high=RANGE_LEVEL)
+                        s2_neg = max(m[2] + np.random.uniform(low=-RANGE_LENGTH, high=-TAU_LENGTH)
+                                     if np.random.random() > 0.5 else
+                                     m[2] + np.random.uniform(low=TAU_LENGTH, high=RANGE_LENGTH), 0)
+                        y_neg[neg_index][i][0] = self.inject_platform(y_neg[neg_index][i][0], s0_neg, s1_neg, s2_neg)
+                        meta_neg[neg_index].append([s0_neg, s1_neg, s2_neg])
+                        neg_index += 1
+                    elif self.args.trail in ['fixed', 'grid', 'more_epochs', 'second_loss']:
+                        s0_neg = m[0] + np.random.uniform(low=-RANGE, high=-TAU) \
+                            if np.random.random() > 0.5 else m[0] + np.random.uniform(low=TAU, high=RANGE)
+                        s2_neg = max(m[2] + np.random.uniform(low=-RANGE, high=-TAU) \
+                                         if np.random.random() > 0.5 else m[2] + np.random.uniform(low=TAU, high=RANGE),
+                                     0)
+                        y_neg[i][0] = self.inject_platform(y_neg[i][0], s0_neg, s1_neg, s2_neg)
+                        meta_neg.append([s0_neg, s1_neg, s2_neg])
+                    else:
+                        raise Exception('Unsupported trail.')
 
-        if self.args.trail in ['more_negative', 'warmup']:
-            c_y_neg = [self(y_neg[i]) for i in range(NUM_NEGATIVE)]
-        else:
-            c_y_neg = self(y_neg)
+                    if neg_index >= NUM_NEGATIVE or self.args.trail in ['fixed', 'grid', 'more_epochs', 'second_loss',
+                                                                        'length_optimized']:
+                        break
+
+            c_y_dict[anomaly_type] = self(y)
+            c_y_pos_dict[anomaly_type] = self(y_pos)
+            if self.args.trail in ['more_negative', 'warmup', 'second_anomaly']:
+                c_y_neg_dict[anomaly_type] = [self(y_neg[i]) for i in range(NUM_NEGATIVE)]
+            elif self.args.trail in ['fixed', 'grid', 'more_epochs', 'second_loss', 'length_optimized']:
+                c_y_neg_dict[anomaly_type] = self(y_neg)
+            else:
+                raise Exception('Unsupported trail.')
+            meta_dict[anomaly_type] = meta
+            meta_neg_dict[anomaly_type] = meta_neg
 
         ### Anomalies should be close to the ones with the same type and similar hyperparameters, and far away from the ones with different types and normal.
-        loss_global = self.info_loss(c_y, c_y_pos, torch.cat([c_x, c_x_pos], dim=0))
+        loss_global = 0
+        if len(self.anomaly_types) == 1:
+            loss_global += self.info_loss(c_y_dict[self.anomaly_types[0]], c_y_pos_dict[self.anomaly_types[0]],
+                                          torch.cat([c_x, c_x_pos], dim=0))
+        else:
+            for anomaly_type in self.anomaly_types:
+                _c_y = list()
+                for _anomaly_type in self.anomaly_types:
+                    if _anomaly_type != anomaly_type:
+                        _c_y.append(c_y_dict[_anomaly_type])
+                _c_y = torch.cat(_c_y, dim=0)
+                loss_global += self.info_loss(c_y_dict[anomaly_type], c_y_pos_dict[anomaly_type],
+                                              torch.cat([c_x, c_x_pos, _c_y], dim=0))
+        loss_global /= len(self.anomaly_types)
 
         ### Anomalies with far away hyperparameters should be far away propotional to delta.
         if self.args.trail in ['second_loss', 'length_optimized']:
-            loss_local = self.info_loss(c_y, c_y_pos, c_y_neg)
-        elif self.args.trail in ['more_negative', 'warmup']:
-            loss_local = sum([hard_negative_loss(
-                c_y, c_y_pos, c_y_neg[i], np.array(meta), np.array(meta_neg[i]),
-                temperature=self.temperature) for i in range(NUM_NEGATIVE)]) / NUM_NEGATIVE
+            # loss_local = self.info_loss(c_y, c_y_pos, c_y_neg)
+            loss_local = 0
+        elif self.args.trail in ['more_negative', 'warmup', 'second_anomaly']:
+            loss_local = 0
+            for anomaly_type in self.anomaly_types:
+                loss_local += sum([hard_negative_loss(c_y_dict[anomaly_type], c_y_pos_dict[anomaly_type],
+                                                      c_y_neg_dict[anomaly_type][i],
+                                                      np.array(meta_dict[anomaly_type]),
+                                                      np.array(meta_neg_dict[anomaly_type][i]))
+                                   for i in range(NUM_NEGATIVE)]) / NUM_NEGATIVE
+            loss_local /= len(self.anomaly_types)
+        elif self.args.trail in ['fixed', 'grid', 'more_epochs']:
+            # loss_local = hard_negative_loss(c_y, c_y_pos, c_y_neg, np.array(meta), np.array(meta_neg))
+            loss_local = 0
         else:
-            loss_local = hard_negative_loss(c_y, c_y_pos, c_y_neg, np.array(meta), np.array(meta_neg),
-                                            temperature=self.temperature)
+            raise Exception('Unsupported trail.')
 
         ### Nomral should be close to each other, and far away from anomalies.
-        if self.args.trail in ['more_negative', 'warmup']:
-            c_y_neg = torch.cat(c_y_neg, dim=0)
-        loss_normal = self.info_loss(c_x, c_x_pos, torch.cat([c_y, c_y_pos, c_y_neg], dim=0))
+        if self.args.trail in ['more_negative', 'warmup', 'second_anomaly']:
+            c_y_neg_dict = [torch.cat(c_y_neg_dict[anomaly_type], dim=0) for anomaly_type in self.anomaly_types]
+        elif self.args.trail in ['fixed', 'grid', 'more_epochs', 'second_loss', 'length_optimized']:
+            c_y_neg_dict = [c_y_neg_dict[anomaly_type] for anomaly_type in self.anomaly_types]
+        else:
+            raise Exception('Unsupported trail.')
+        loss_normal = self.info_loss(c_x, c_x_pos, torch.cat(
+            [torch.cat(list(c_y_dict.values()), dim=0), torch.cat(list(c_y_pos_dict.values()), dim=0),
+             torch.cat(c_y_neg_dict, dim=0)], dim=0))
 
         if self.args.trail == 'warmup':
             if self.current_epoch < 30:
@@ -205,8 +257,11 @@ class Encoder(pl.LightningModule):
                 weight_global = 1.0
                 weight_local = 1.0
             loss = weight_global * loss_global + weight_local * loss_local + weight_normal * loss_normal
-        else:
+        elif self.args.trail in ['fixed', 'grid', 'more_epochs', 'second_loss', 'length_optimized', 'more_negative',
+                                 'second_anomaly']:
             loss = loss_global + loss_local + loss_normal
+        else:
+            raise Exception('Unsupported trail.')
 
         if loss_global > 0:
             pass
@@ -224,128 +279,18 @@ class Encoder(pl.LightningModule):
         self.log("loss_global", loss_global, prog_bar=True)
         self.log("loss_local", loss_local, prog_bar=True)
         self.log("loss_normal", loss_normal, prog_bar=True)
-        self.log("train_loss", loss, prog_bar=True)
+        self.log(f"{process}_loss", loss, prog_bar=True)
         return loss
+
+    def training_step(self, x, batch_idx):
+        self.normal_x = self.normal_x.to(device)
+        if batch_idx not in self.normal_idx:
+            self.normal_idx.add(batch_idx)
+            self.normal_x = torch.cat([self.normal_x, x], dim=0).to(device)
+        return self.main_process(x=x, process='train')
 
     def validation_step(self, x, batch_idx):
-        x_pos = self.normal_x[np.random.choice(len(self.normal_x), x.shape[0])]
-
-        y, y_pos = x.clone(), x.clone()
-        meta, meta_pos = list(), list()
-        if self.args.trail in ['more_negative', 'warmup']:
-            y_neg = [x.clone() for _ in range(NUM_NEGATIVE)]
-            meta_neg = [list() for _ in range(NUM_NEGATIVE)]
-        elif self.args.trail in ['fixed', 'grid', 'more_epochs', 'second_loss', 'length_optimized']:
-            y_neg = x.clone()
-            meta_neg = list()
-        else:
-            raise Exception('Unsupported trail.')
-
-        for i in range(len(x)):
-            ### Platform anomaly
-            # m = [hist_sample(level_0_cdf, LEVEL_BINS), np.random.uniform(0, 0.5), hist_sample(length_0_cdf, LENGTH_BINS)]
-            if self.args.trail == 'fixed':
-                m = [FIXED_LEVEL, np.random.uniform(0, 0.5), FIXED_LENGTH]
-            else:
-                m = [config_from_grid(CDF_LEVEL, GRID_LEVEL), np.random.uniform(0, 0.5),
-                     config_from_grid(CDF_LENGTH, GRID_LENGTH)]
-            y[i][0] = self.inject_platform(y[i][0], *m)
-            meta.append(m)
-
-            # positive samples
-            s1 = np.random.uniform(0, 0.5)
-            if self.args.trail == 'length_optimized':
-                s0 = max(m[0] + np.random.uniform(low=-TAU_LEVEL, high=TAU_LEVEL), -1.0)
-                s0 = min(s0, 1.0)
-                s2 = max(m[2] + np.random.uniform(low=-TAU_LENGTH, high=TAU_LENGTH), 0.20)
-                s2 = min(s2, 0.50)
-            elif self.args.trail in ['more_negative', 'warmup']:
-                s0 = m[0] + np.random.uniform(low=-TAU_LEVEL, high=TAU_LEVEL)
-                s2 = max(m[2] + np.random.uniform(low=-TAU_LENGTH, high=TAU_LENGTH), 0)
-            else:
-                s0 = m[0] + np.random.uniform(low=-TAU, high=TAU)
-                s2 = max(m[2] + np.random.uniform(low=-TAU, high=TAU), 0)
-            y_pos[i][0] = self.inject_platform(y_pos[i][0], s0, s1, s2)
-            meta_pos.append([s0, s1, s2])
-
-            # negative samples
-            neg_index = 0
-            while True:
-                s1_neg = np.random.uniform(0, 0.5)
-                if self.args.trail == 'length_optimized':
-                    s0_neg = np.random.uniform(low=-1.0, high=m[0] - TAU_LEVEL) if np.random.random() < (
-                            (m[0] + 1.0) / 2.0) else np.random.uniform(low=m[0] + TAU_LEVEL, high=1.0)
-                    s2_neg = np.random.uniform(low=0.20, high=m[2] - TAU_LENGTH) if np.random.random() < (
-                            (m[2] - 0.20) / 0.30) else np.random.uniform(low=m[2] + TAU_LENGTH, high=0.50)
-                    y_neg[i][0] = self.inject_platform(y_neg[i][0], s0_neg, s1_neg, s2_neg)
-                    meta_neg.append([s0_neg, s1_neg, s2_neg])
-                elif self.args.trail in ['more_negative', 'warmup']:
-                    s0_neg = m[0] + np.random.uniform(low=-RANGE_LEVEL, high=-TAU_LEVEL) \
-                        if np.random.random() > 0.5 else m[0] + np.random.uniform(low=TAU_LEVEL, high=RANGE_LEVEL)
-                    s2_neg = max(m[2] + np.random.uniform(low=-RANGE_LENGTH, high=-TAU_LENGTH)
-                                 if np.random.random() > 0.5 else
-                                 m[2] + np.random.uniform(low=TAU_LENGTH, high=RANGE_LENGTH), 0)
-                    y_neg[neg_index][i][0] = self.inject_platform(y_neg[neg_index][i][0], s0_neg, s1_neg, s2_neg)
-                    meta_neg[neg_index].append([s0_neg, s1_neg, s2_neg])
-                    neg_index += 1
-                else:
-                    s0_neg = m[0] + np.random.uniform(low=-RANGE, high=-TAU) \
-                        if np.random.random() > 0.5 else m[0] + np.random.uniform(low=TAU, high=RANGE)
-                    s2_neg = max(m[2] + np.random.uniform(low=-RANGE, high=-TAU) \
-                                     if np.random.random() > 0.5 else m[2] + np.random.uniform(low=TAU, high=RANGE), 0)
-                    y_neg[i][0] = self.inject_platform(y_neg[i][0], s0_neg, s1_neg, s2_neg)
-                    meta_neg.append([s0_neg, s1_neg, s2_neg])
-
-                if neg_index >= NUM_NEGATIVE or self.args.trail in ['fixed', 'grid', 'more_epochs', 'second_loss',
-                                                                    'length_optimized']:
-                    break
-
-        outputs = self(torch.cat([x, y, y_pos, x_pos], dim=0))
-        c_x, c_y, c_y_pos, c_x_pos = torch.split(outputs, x.shape[0], dim=0)
-
-        if self.args.trail in ['more_negative', 'warmup']:
-            c_y_neg = [self(y_neg[i]) for i in range(NUM_NEGATIVE)]
-        else:
-            c_y_neg = self(y_neg)
-
-        loss_global = self.info_loss(c_y, c_y_pos, torch.cat([c_x, c_x_pos], dim=0))
-
-        if self.args.trail in ['second_loss', 'length_optimized']:
-            loss_local = self.info_loss(c_y, c_y_pos, c_y_neg)
-        elif self.args.trail in ['more_negative', 'warmup']:
-            loss_local = sum([hard_negative_loss(
-                c_y, c_y_pos, c_y_neg[i], np.array(meta), np.array(meta_neg[i]),
-                temperature=self.temperature) for i in range(NUM_NEGATIVE)]) / NUM_NEGATIVE
-        else:
-            loss_local = hard_negative_loss(c_y, c_y_pos, c_y_neg, np.array(meta), np.array(meta_neg),
-                                            temperature=self.temperature)
-
-        if self.args.trail in ['more_negative', 'warmup']:
-            c_y_neg = torch.cat(c_y_neg, dim=0)
-        loss_normal = self.info_loss(c_x, c_x_pos, torch.cat([c_y, c_y_pos, c_y_neg], dim=0))
-
-        if self.args.trail == 'warmup':
-            if self.current_epoch < 30:
-                weight_normal = 1.0
-                weight_global = 0.01
-                weight_local = 0.001
-            elif self.current_epoch < 60:
-                weight_normal = 1.0
-                weight_global = 1.0
-                weight_local = 0.01
-            else:
-                weight_normal = 1.0
-                weight_global = 1.0
-                weight_local = 1.0
-            loss = weight_global * loss_global + weight_local * loss_local + weight_normal * loss_normal
-        else:
-            loss = loss_global + loss_local + loss_normal
-
-        self.log("loss_global", loss_global, prog_bar=True)
-        self.log("loss_local", loss_local, prog_bar=True)
-        self.log("loss_normal", loss_normal, prog_bar=True)
-        self.log("val_loss", loss, prog_bar=True)
-        return loss
+        return self.main_process(x=x, process='val')
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)

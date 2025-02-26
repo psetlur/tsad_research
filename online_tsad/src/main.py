@@ -40,11 +40,11 @@ if __name__ == "__main__":
     # parser.add_argument("--trail", type=str, default='fixed')
     # parser.add_argument("--trail", type=str, default='grid')
     # parser.add_argument("--trail", type=str, default='more_epochs')
-    parser.add_argument("--trail", type=str, default='second_loss')
+    # parser.add_argument("--trail", type=str, default='second_loss')
     # parser.add_argument("--trail", type=str, default='length_optimized')
     # parser.add_argument("--trail", type=str, default='more_negative')
     # parser.add_argument("--trail", type=str, default='warmup')
-    # parser.add_argument("--trail", type=str, default='temperature=0.5')
+    parser.add_argument("--trail", type=str, default='second_anomaly')
     # parser.add_argument("--device", type=str, default='cpu')
     parser.add_argument("--device", type=str, default='cuda:0')
     parser.add_argument(
