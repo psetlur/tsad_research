@@ -102,8 +102,88 @@ def plot_wd_f1score():
             plot_heatmap(data=length_wd, title=f'{anomaly_type} WD', config_name='length')
             plot_heatmap(data=length_f1, title=f'{anomaly_type} F1-score', config_name='length')
 
+def plot_combined_metrics():
+    with open(f"logs/training/{trail}/wd_f1score.txt", "r") as f:
+        lines = f.readlines()
+        wd = ast.literal_eval(lines[0][4:])
+        f1score = ast.literal_eval(lines[1][9:])
+    
+    fig, axs = plt.subplots(1, 2, figsize=(18, 8))
+    fig.suptitle('Comparison of Level and Length Effects on Anomaly Detection', fontsize=16)
+    
+    axs[0].set_title('Best WD Scores')
+    axs[1].set_title('Best F1 Scores')
+    
+    level_values = np.round(np.arange(-1.0, 1.1, 0.1), 1)
+    length_values = np.round(np.arange(0.20, 0.52, 0.02), 2)
+    
+    styles = {
+        ('platform', 'level'): {'color': 'blue', 'marker': 'o', 'linestyle': '-', 'label': 'Platform (Level)'},
+        ('platform', 'length'): {'color': 'blue', 'marker': 's', 'linestyle': '--', 'label': 'Platform (Length)'},
+        ('mean', 'level'): {'color': 'red', 'marker': '^', 'linestyle': '-', 'label': 'Mean (Level)'},
+        ('mean', 'length'): {'color': 'red', 'marker': 'D', 'linestyle': '--', 'label': 'Mean (Length)'}
+    }
+    
+    # get best performance for each anomaly type and parameter type
+    for anomaly_type in ['platform', 'mean']:
+        for param_type in ['level', 'length']:
+            if param_type == 'level':
+                param_values = level_values
+            else:
+                param_values = length_values
+            
+            best_wd = []
+            best_f1 = []
+            
+            # For each train parameter value
+            for param in param_values:
+                param_str = str(param)
+                
+                # Skip if this parameter isn't in the data
+                if param_str not in wd[anomaly_type][param_type]:
+                    best_wd.append(np.nan)  # Use np.nan for missing values
+                    best_f1.append(np.nan)
+                    continue
+                
+                # find min WD score
+                min_wd = float('inf')
+                for test_param in wd[anomaly_type][param_type][param_str]:
+                    value = wd[anomaly_type][param_type][param_str][test_param]
+                    if value < min_wd:
+                        min_wd = value
+                best_wd.append(min_wd if min_wd != float('inf') else np.nan)
+                
+                # find max F1 score
+                max_f1 = 0
+                for test_param in f1score[anomaly_type][param_type][param_str]:
+                    value = f1score[anomaly_type][param_type][param_str][test_param]
+                    if value > max_f1:
+                        max_f1 = value
+                best_f1.append(max_f1)
+            
+            # plot data with style
+            style = styles[(anomaly_type, param_type)]
+            axs[0].plot(param_values, best_wd, color=style['color'], marker=style['marker'], 
+                       linestyle=style['linestyle'], label=style['label'])
+            axs[1].plot(param_values, best_f1, color=style['color'], marker=style['marker'], 
+                       linestyle=style['linestyle'], label=style['label'])
+    
+    for i in range(2):
+        axs[i].set_xlabel('Parameter Value')
+        axs[i].legend()
+        axs[i].grid(True, linestyle='--', alpha=0.7)
+    
+    axs[0].set_ylabel('Wasserstein Distance (Lower is Better)')
+    axs[1].set_ylabel('F1 Score (Higher is Better)')
+    
+    plt.tight_layout(rect=[0, 0, 1, 0.96])  # Adjust layout for title
+    plt.savefig(f'logs/training/{trail}/combined_metrics_comparison.pdf')
+    plt.show()
+    plt.close()
+
 
 if __name__ == "__main__":
     # plot_loss_curve(last=False)
     # plot_loss_curve(last=True)
-    plot_wd_f1score()
+    # plot_wd_f1score()
+    plot_combined_metrics()
