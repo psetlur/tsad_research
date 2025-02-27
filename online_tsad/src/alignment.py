@@ -323,146 +323,274 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
         #
         #             print(f'train_length: {train_length}, valid_length: {valid_length}, wd: {loss}, f1score: {f1}')
 
-        for anomaly_type in anomaly_types:
-            # with test
-            visualize(train_inlier=z_train, valid_inlier=z_valid, train_augs=z_train_level_aug[anomaly_type],
-                      valid_augs=z_valid_level_aug[anomaly_type], train_configs=train_levels,
-                      valid_configs=valid_levels, config_name='level', fixed_config=f'fixed_length{fixed_length}',
-                      trail=args.trail, test=True, anomaly_type=anomaly_type)
-            visualize(train_inlier=z_train, valid_inlier=z_valid, train_augs=z_train_length_aug[anomaly_type],
-                      valid_augs=z_valid_length_aug[anomaly_type], train_configs=train_lengths,
-                      valid_configs=valid_lengths, config_name='length', fixed_config=f'fixed_level{fixed_level}',
-                      trail=args.trail, test=True, anomaly_type=anomaly_type)
+        # for anomaly_type in anomaly_types:
+        #     # with test
+        #     visualize(train_inlier=z_train, valid_inlier=z_valid, train_augs=z_train_level_aug[anomaly_type],
+        #               valid_augs=z_valid_level_aug[anomaly_type], train_configs=train_levels,
+        #               valid_configs=valid_levels, config_name='level', fixed_config=f'fixed_length{fixed_length}',
+        #               trail=args.trail, test=True, anomaly_type=anomaly_type)
+        #     visualize(train_inlier=z_train, valid_inlier=z_valid, train_augs=z_train_length_aug[anomaly_type],
+        #               valid_augs=z_valid_length_aug[anomaly_type], train_configs=train_lengths,
+        #               valid_configs=valid_lengths, config_name='length', fixed_config=f'fixed_level{fixed_level}',
+        #               trail=args.trail, test=True, anomaly_type=anomaly_type)
+        #
+        #     # without test
+        #     visualize(train_inlier=z_train, valid_inlier=z_valid, train_augs=z_train_level_aug[anomaly_type],
+        #               valid_augs=None, train_configs=train_levels, valid_configs=None, config_name='level',
+        #               fixed_config=f'fixed_length{fixed_length}', trail=args.trail, test=False,
+        #               anomaly_type=anomaly_type)
+        #     visualize(train_inlier=z_train, valid_inlier=z_valid, train_augs=z_train_length_aug[anomaly_type],
+        #               valid_augs=None, train_configs=train_lengths, valid_configs=None, config_name='length',
+        #               fixed_config=f'fixed_level{fixed_level}', trail=args.trail, test=False, anomaly_type=anomaly_type)
 
-            # without test
-            visualize(train_inlier=z_train, valid_inlier=z_valid, train_augs=z_train_level_aug[anomaly_type],
-                      valid_augs=None, train_configs=train_levels, valid_configs=None, config_name='level',
-                      fixed_config=f'fixed_length{fixed_length}', trail=args.trail, test=False,
-                      anomaly_type=anomaly_type)
-            visualize(train_inlier=z_train, valid_inlier=z_valid, train_augs=z_train_length_aug[anomaly_type],
-                      valid_augs=None, train_configs=train_lengths, valid_configs=None, config_name='length',
-                      fixed_config=f'fixed_level{fixed_level}', trail=args.trail, test=False, anomaly_type=anomaly_type)
+        outlier = {'train': {'level': z_train_level_aug_t, 'length': z_train_length_aug_t},
+                   'valid': {'level': z_valid_level_aug_t, 'length': z_valid_length_aug_t}}
+        inlier = {'train': z_train, 'valid': z_valid}
+        configs = {'level': train_levels, 'length': train_lengths}
+        visualize_multiple(inlier=inlier, outlier=outlier, configs=configs, trail=args.trail,
+                           anomaly_types=anomaly_types)
 
     return total_loss, f1score
 
 
-def visualize(train_inlier, valid_inlier, train_augs, valid_augs, train_configs, valid_configs, config_name,
-              fixed_config, trail, anomaly_type, inlier=True, test=True, converse=1):
-    train_aug = torch.cat(train_augs, dim=0)
-    if test is True:
-        valid_aug = torch.cat(valid_augs, dim=0)
-        aug = torch.cat([train_aug, valid_aug], dim=0)
-    else:
-        aug = torch.cat(train_augs, dim=0)
+# COLORS = {'level': {'train': {'platform': 'Greys', 'mean': 'Oranges'},
+#                     'valid': {'platform': 'Reds', 'mean': 'Purples'}},
+#           'length': {'train': {'platform': 'viridis', 'mean': 'plasma'},
+#                      'valid': {'platform': 'BuPu', 'mean': 'GnBu'}}}
 
-    all_data = torch.cat([train_inlier, valid_inlier, aug], dim=0).to('cpu').numpy()
-    inlier_size = len(train_inlier) + len(valid_inlier)
+from matplotlib.colors import LinearSegmentedColormap
 
-    # if inlier is True:
-    #     all_data = torch.cat([train_inlier, valid_inlier, aug], dim=0).to('cpu').numpy()
-    #     inlier_size = len(train_inlier) + len(valid_inlier)
-    # else:
-    #     all_data = torch.cat([aug], dim=0).to('cpu').numpy()
-    #     inlier_size = 0
 
+# 定义深绿色色系
+def create_dark_green_cmap(name="DarkGreen"):
+    cdict = {
+        'red': [(0.0, 0.8, 0.8), (1.0, 0.0, 0.0)],
+        'green': [(0.0, 1.0, 1.0), (1.0, 0.2, 0.2)],
+        'blue': [(0.0, 0.8, 0.8), (1.0, 0.0, 0.0)],
+    }
+    return LinearSegmentedColormap(name, cdict)
+
+
+# 定义棕色色系
+def create_brown_cmap(name="Brown"):
+    cdict = {
+        'red': [(0.0, 1.0, 1.0), (1.0, 0.5, 0.5)],
+        'green': [(0.0, 0.8, 0.8), (1.0, 0.2, 0.2)],
+        'blue': [(0.0, 0.6, 0.6), (1.0, 0.0, 0.0)],
+    }
+    return LinearSegmentedColormap(name, cdict)
+
+
+# 创建自定义色系
+dark_green_cmap = create_dark_green_cmap()
+brown_cmap = create_brown_cmap()
+
+COLORS = {
+    'level': {
+        'train': {
+            'platform': 'Blues',
+            'mean': 'Reds'
+        },
+        'valid': {
+            'platform': 'Purples',
+            'mean': 'Oranges'
+        }
+    },
+    'length': {
+        'train': {
+            'platform': 'Greens',
+            'mean': 'Greys'
+        },
+        'valid': {
+            'platform': dark_green_cmap,
+            'mean': brown_cmap
+        }
+    }
+}
+
+
+def visualize_multiple(inlier, outlier, configs, trail, anomaly_types):
+    inlier_data = torch.cat([inlier['train'], inlier['valid']], dim=0)
+    outlier_data = torch.cat([torch.cat([torch.cat(outlier['train']['level'][anomaly_type], dim=0)
+                                         for anomaly_type in anomaly_types], dim=0),
+                              torch.cat([torch.cat(outlier['valid']['level'][anomaly_type], dim=0)
+                                         for anomaly_type in anomaly_types], dim=0),
+                              torch.cat([torch.cat(outlier['train']['length'][anomaly_type], dim=0)
+                                         for anomaly_type in anomaly_types], dim=0),
+                              torch.cat([torch.cat(outlier['valid']['length'][anomaly_type], dim=0)
+                                         for anomaly_type in anomaly_types], dim=0)], dim=0)
+    all_data = torch.cat([inlier_data, outlier_data], dim=0).to('cpu').numpy()
+    inlier_size = len(inlier_data)
     xt = TSNE(n_components=2, random_state=42).fit_transform(all_data)
-    if config_name == 'level':
-        plt.figure(figsize=(12, 10))
-    elif config_name == 'length':
-        plt.figure(figsize=(12, 8))
-    else:
-        raise Exception('Unsupported config_name.')
-    # if inlier is True:
-    # train inliers
-    plt.scatter(xt[:len(train_inlier), 0], xt[:len(train_inlier), 1], c='b', alpha=0.5)
-    # test inliers
-    plt.scatter(xt[len(train_inlier):len(train_inlier) + len(valid_inlier), 0],
-                xt[len(train_inlier):len(train_inlier) + len(valid_inlier), 1], c='g', alpha=0.5)
-    legend_elements = list()
-    # if inlier is True:
-    legend_elements.append(
-        Line2D([0], [0], marker='o', color='w', label='Train inliers', markerfacecolor='b', markersize=10))
-    legend_elements.append(
-        Line2D([0], [0], marker='o', color='w', label='Test inliers', markerfacecolor='g', markersize=10))
+    plt.figure(figsize=(12, 10))
 
-    # train outliers
-    if test is True:
-        cmap = cm.get_cmap('Greys')
-    else:
-        cmap = cm.get_cmap('Reds')
+    # train and test inliers
+    plt.scatter(xt[:len(inlier['train']), 0], xt[:len(inlier['train']), 1], c='b', alpha=0.5, label='Train inliers')
+    plt.scatter(xt[len(inlier['train']): len(inlier['train']) + len(inlier['valid']), 0],
+                xt[len(inlier['train']): len(inlier['train']) + len(inlier['valid']), 1],
+                c='g', alpha=0.5, label='Test inliers')
+    legend_elements = [
+        Line2D([0], [0], marker='o', color='w', label='Train inliers', markerfacecolor='b', markersize=10),
+        Line2D([0], [0], marker='o', color='w', label='Test inliers', markerfacecolor='g', markersize=10)
+    ]
 
-    #     cmap = cm.get_cmap('tab20')
-    if len(train_configs) == 1:
-        normalized_values = [0.5]
-    else:
-        normalized_values = (train_configs - np.min(train_configs)) / (np.max(train_configs) - np.min(train_configs))
-        normalized_values = normalized_values * (1 - 0.1) + 0.1
-    colors = [cmap(val) for val in normalized_values]
-    for i, value in enumerate(train_configs):
-        start_idx = inlier_size + i * len(train_augs[i])
-        end_idx = start_idx + len(train_augs[i])
-        # if config_name == 'level' and value == 0:
-        #     plt.scatter(xt[start_idx:end_idx, 0], xt[start_idx:end_idx, 1], c='y', alpha=0.5)
-        #     legend_elements.append(
-        #         Line2D([0], [0], marker='o', color='w', label=f'Train outliers ({config_name}={value})',
-        #                markerfacecolor='y', markersize=10))
-        # else:
-        plt.scatter(xt[start_idx:end_idx, 0], xt[start_idx:end_idx, 1], c=[colors[i]] * (end_idx - start_idx),
-                    alpha=0.5)
-        legend_elements.append(
-            Line2D([0], [0], marker='o', color='w', label=f'Train outliers ({config_name}={value})',
-                   markerfacecolor=colors[i], markersize=10))
+    _start_idx = inlier_size
 
-        # if converse == 1:
-        #     plt.scatter(xt[start_idx:end_idx, 0], xt[start_idx:end_idx, 1], c=[colors[i]] * (end_idx - start_idx),
-        #                 alpha=0.5)
-        # else:
-        #     plt.scatter(xt[start_idx:end_idx, 0], xt[start_idx:end_idx, 1], c=[colors[i]] * (end_idx - start_idx),
-        #                 alpha=0.5, zorder=len(train_configs) - i)
+    def plot_outlier(start_idx, config_name, process):
+        for anomaly_type in anomaly_types:
+            cmap = cm.get_cmap(COLORS[config_name][process][anomaly_type])
+            config_values = np.array(configs[config_name])
+            normalized = (config_values - np.min(config_values)) / (np.max(config_values) - np.min(config_values))
+            normalized = normalized * (1 - 0.1) + 0.1
+            colors = [cmap(val) for val in normalized]
+            for i, value in enumerate(config_values):
+                end_idx = start_idx + len(outlier[process][config_name][anomaly_type][i])
+                plt.scatter(xt[start_idx: end_idx, 0], xt[start_idx: end_idx, 1], c=[colors[i]] * (end_idx - start_idx),
+                            alpha=0.5)
+                start_idx = end_idx
+                legend_elements.append(Line2D([0], [0], marker='o', color='w',
+                                              label=f'{process} outliers ({anomaly_type}_{config_name}={value})',
+                                              markerfacecolor=colors[i], markersize=10))
+        return start_idx
 
-    # test outliers
-    if test is True:
-        cmap = cm.get_cmap('Reds')
-        if len(valid_configs) == 1:
-            normalized_values = [0.5]
-        else:
-            normalized_values = (valid_configs - np.min(valid_configs)) / (
-                    np.max(valid_configs) - np.min(valid_configs))
-            normalized_values = normalized_values * (1 - 0.1) + 0.1
-        colors = [cmap(val) for val in normalized_values]
-        for i, value in enumerate(valid_configs):
-            start_idx = inlier_size + len(train_aug) + i * len(valid_augs[i])
-            end_idx = start_idx + len(valid_augs[i])
-            # if config_name == 'level' and value == 0:
-            #     plt.scatter(xt[start_idx:end_idx, 0], xt[start_idx:end_idx, 1], c='c', alpha=0.5)
-            #     legend_elements.append(
-            #         Line2D([0], [0], marker='o', color='w', label=f'Test outliers ({config_name}={value})',
-            #                markerfacecolor='c', markersize=10))
-            # else:
-            plt.scatter(xt[start_idx:end_idx, 0], xt[start_idx:end_idx, 1], c=[colors[i]] * (end_idx - start_idx),
-                        alpha=0.5)
-            legend_elements.append(
-                Line2D([0], [0], marker='o', color='w', label=f'Test outliers ({config_name}={value})',
-                       markerfacecolor=colors[i], markersize=10))
-
-            # if converse == 1:
-            #     plt.scatter(xt[start_idx:end_idx, 0], xt[start_idx:end_idx, 1], c=[colors[i]] * (end_idx - start_idx),
-            #                 alpha=0.5)
-            # else:
-            #     plt.scatter(xt[start_idx:end_idx, 0], xt[start_idx:end_idx, 1], c=[colors[i]] * (end_idx - start_idx),
-            #                 alpha=0.5, zorder=len(valid_configs) - i)
-
-    plt.legend(handles=legend_elements, loc="upper left", bbox_to_anchor=(1, 1))
+    _start_idx = plot_outlier(start_idx=_start_idx, config_name='level', process='train')
+    _start_idx = plot_outlier(start_idx=_start_idx, config_name='level', process='valid')
+    _start_idx = plot_outlier(start_idx=_start_idx, config_name='length', process='train')
+    _start_idx = plot_outlier(start_idx=_start_idx, config_name='length', process='valid')
 
     plt.xlabel('t-SNE 1')
     plt.ylabel('t-SNE 2')
-    plt.title(f'{anomaly_type}')
-
-    # if converse == 1:
-    #     plt.title('t-SNE Visualization of Embeddings (Later on the Top)')
-    # else:
-    #     plt.title('t-SNE Visualization of Embeddings (Later on the Bottom)')
+    plt.title('t-SNE Visualization of Embeddings')
     plt.tight_layout()
-    plt.savefig(f'logs/training/{trail}/{anomaly_type}_{fixed_config}_test{test}.pdf', bbox_inches='tight')
+    plt.savefig(f'logs/training/{trail}/visualization1.pdf', bbox_inches='tight')
     plt.show()
     plt.close()
+
+    num_columns = 3  # Number of columns for the legend
+    plt.figure(figsize=(12, len(legend_elements) * 0.2 / num_columns))
+    plt.axis('off')
+    plt.legend(handles=legend_elements, loc='center', ncol=num_columns, fontsize=8)
+    plt.savefig(f'logs/training/{trail}/legend1.pdf', bbox_inches='tight')
+    plt.show()
+    plt.close()
+#
+# def visualize(train_inlier, valid_inlier, train_augs, valid_augs, train_configs, valid_configs, config_name,
+#               fixed_config, trail, anomaly_type, inlier=True, test=True, converse=1):
+#     train_aug = torch.cat(train_augs, dim=0)
+#     if test is True:
+#         valid_aug = torch.cat(valid_augs, dim=0)
+#         aug = torch.cat([train_aug, valid_aug], dim=0)
+#     else:
+#         aug = train_aug
+#
+#     all_data = torch.cat([train_inlier, valid_inlier, aug], dim=0).to('cpu').numpy()
+#     inlier_size = len(train_inlier) + len(valid_inlier)
+#
+#     # if inlier is True:
+#     #     all_data = torch.cat([train_inlier, valid_inlier, aug], dim=0).to('cpu').numpy()
+#     #     inlier_size = len(train_inlier) + len(valid_inlier)
+#     # else:
+#     #     all_data = torch.cat([aug], dim=0).to('cpu').numpy()
+#     #     inlier_size = 0
+#
+#     xt = TSNE(n_components=2, random_state=42).fit_transform(all_data)
+#     if config_name == 'level':
+#         plt.figure(figsize=(12, 10))
+#     elif config_name == 'length':
+#         plt.figure(figsize=(12, 8))
+#     else:
+#         raise Exception('Unsupported config_name.')
+#     # if inlier is True:
+#     # train inliers
+#     plt.scatter(xt[:len(train_inlier), 0], xt[:len(train_inlier), 1], c='b', alpha=0.5)
+#     # test inliers
+#     plt.scatter(xt[len(train_inlier):len(train_inlier) + len(valid_inlier), 0],
+#                 xt[len(train_inlier):len(train_inlier) + len(valid_inlier), 1], c='g', alpha=0.5)
+#     legend_elements = list()
+#     # if inlier is True:
+#     legend_elements.append(
+#         Line2D([0], [0], marker='o', color='w', label='Train inliers', markerfacecolor='b', markersize=10))
+#     legend_elements.append(
+#         Line2D([0], [0], marker='o', color='w', label='Test inliers', markerfacecolor='g', markersize=10))
+#
+#     # train outliers
+#     if test is True:
+#         cmap = cm.get_cmap('Greys')
+#     else:
+#         cmap = cm.get_cmap('Reds')
+#
+#     #     cmap = cm.get_cmap('tab20')
+#     if len(train_configs) == 1:
+#         normalized_values = [0.5]
+#     else:
+#         normalized_values = (train_configs - np.min(train_configs)) / (np.max(train_configs) - np.min(train_configs))
+#         normalized_values = normalized_values * (1 - 0.1) + 0.1
+#     colors = [cmap(val) for val in normalized_values]
+#     for i, value in enumerate(train_configs):
+#         start_idx = inlier_size + i * len(train_augs[i])
+#         end_idx = start_idx + len(train_augs[i])
+#         # if config_name == 'level' and value == 0:
+#         #     plt.scatter(xt[start_idx:end_idx, 0], xt[start_idx:end_idx, 1], c='y', alpha=0.5)
+#         #     legend_elements.append(
+#         #         Line2D([0], [0], marker='o', color='w', label=f'Train outliers ({config_name}={value})',
+#         #                markerfacecolor='y', markersize=10))
+#         # else:
+#         plt.scatter(xt[start_idx:end_idx, 0], xt[start_idx:end_idx, 1], c=[colors[i]] * (end_idx - start_idx),
+#                     alpha=0.5)
+#         legend_elements.append(
+#             Line2D([0], [0], marker='o', color='w', label=f'Train outliers ({config_name}={value})',
+#                    markerfacecolor=colors[i], markersize=10))
+#
+#         # if converse == 1:
+#         #     plt.scatter(xt[start_idx:end_idx, 0], xt[start_idx:end_idx, 1], c=[colors[i]] * (end_idx - start_idx),
+#         #                 alpha=0.5)
+#         # else:
+#         #     plt.scatter(xt[start_idx:end_idx, 0], xt[start_idx:end_idx, 1], c=[colors[i]] * (end_idx - start_idx),
+#         #                 alpha=0.5, zorder=len(train_configs) - i)
+#
+#     # test outliers
+#     if test is True:
+#         cmap = cm.get_cmap('Reds')
+#         if len(valid_configs) == 1:
+#             normalized_values = [0.5]
+#         else:
+#             normalized_values = (valid_configs - np.min(valid_configs)) / (
+#                     np.max(valid_configs) - np.min(valid_configs))
+#             normalized_values = normalized_values * (1 - 0.1) + 0.1
+#         colors = [cmap(val) for val in normalized_values]
+#         for i, value in enumerate(valid_configs):
+#             start_idx = inlier_size + len(train_aug) + i * len(valid_augs[i])
+#             end_idx = start_idx + len(valid_augs[i])
+#             # if config_name == 'level' and value == 0:
+#             #     plt.scatter(xt[start_idx:end_idx, 0], xt[start_idx:end_idx, 1], c='c', alpha=0.5)
+#             #     legend_elements.append(
+#             #         Line2D([0], [0], marker='o', color='w', label=f'Test outliers ({config_name}={value})',
+#             #                markerfacecolor='c', markersize=10))
+#             # else:
+#             plt.scatter(xt[start_idx:end_idx, 0], xt[start_idx:end_idx, 1], c=[colors[i]] * (end_idx - start_idx),
+#                         alpha=0.5)
+#             legend_elements.append(
+#                 Line2D([0], [0], marker='o', color='w', label=f'Test outliers ({config_name}={value})',
+#                        markerfacecolor=colors[i], markersize=10))
+#
+#             # if converse == 1:
+#             #     plt.scatter(xt[start_idx:end_idx, 0], xt[start_idx:end_idx, 1], c=[colors[i]] * (end_idx - start_idx),
+#             #                 alpha=0.5)
+#             # else:
+#             #     plt.scatter(xt[start_idx:end_idx, 0], xt[start_idx:end_idx, 1], c=[colors[i]] * (end_idx - start_idx),
+#             #                 alpha=0.5, zorder=len(valid_configs) - i)
+#
+#     plt.legend(handles=legend_elements, loc="upper left", bbox_to_anchor=(1, 1))
+#
+#     plt.xlabel('t-SNE 1')
+#     plt.ylabel('t-SNE 2')
+#     plt.title(f'{anomaly_type}')
+#
+#     # if converse == 1:
+#     #     plt.title('t-SNE Visualization of Embeddings (Later on the Top)')
+#     # else:
+#     #     plt.title('t-SNE Visualization of Embeddings (Later on the Bottom)')
+#     plt.tight_layout()
+#     plt.savefig(f'logs/training/{trail}/{anomaly_type}_{fixed_config}_test{test}.pdf', bbox_inches='tight')
+#     plt.show()
+#     plt.close()
