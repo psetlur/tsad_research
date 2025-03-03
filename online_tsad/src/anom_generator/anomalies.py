@@ -96,6 +96,18 @@ class AnomFuncs:
 
         ts_row[start: start + length] += level
         return ts_row, start, length, level
+    
+    @staticmethod
+    def inject_spike(ts_row, level_h0, level_h1, start):
+        start_index = int(len(ts_row) * start)
+
+        cdf = [0, level_h0, level_h0 + level_h1, 1]
+        level_r = np.digitize(np.random.random(1), bins=cdf)[0]
+        level = np.random.uniform(LEVEL_BINS[level_r - 1], LEVEL_BINS[level_r])
+
+        ts_row[start_index] = level
+
+        return ts_row, start_index, 1, level
 
     # @staticmethod
     # def inject_trend(ts_row, slope, start, length):
@@ -202,6 +214,17 @@ class AnomFuncs:
                 anomaly_params_processed['start'][i] = start
                 anomaly_params_processed['length'][i] = length
                 anomaly_params_processed['level'][i] = level
+            elif anomaly_type == "spike":
+                self.np_data[i, :], start_index, length, level = self.inject_spike(
+                    self.np_data[i, :],
+                    anomaly_params['level_h0'], anomaly_params['level_h1'],
+                    anomaly_params['start']
+                )
+                anomaly_params_processed['start'][i] = start_index
+                anomaly_params_processed['length'][i] = length
+                anomaly_params_processed['level'][i] = level
+                
+                
             # elif anomaly_type == "variance":
             #     self.np_data[i, :] = self.inject_variance(
             #         self.np_data[i, :], **anomaly_params

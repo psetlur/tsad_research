@@ -95,11 +95,18 @@ class Encoder(pl.LightningModule):
         ts_row[start: start + length] += float(level)
         return ts_row
 
+    def inject_spike(start, ts_row, level):
+        start_idx = int(len(ts_row) * start)
+        ts_row[start_idx] = float(level)
+        return ts_row
+
     def inject(self, anomaly_type, ts, config):
         if anomaly_type == 'platform':
             return self.inject_platform(ts, *config)
         elif anomaly_type == 'mean':
             return self.inject_mean(ts, *config)
+        elif anomaly_type == 'spike':
+            return self.inject_spike(ts, *config)
         else:
             raise Exception('Unsupported anomaly_type.')
 

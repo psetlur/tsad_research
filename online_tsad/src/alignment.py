@@ -64,11 +64,21 @@ def inject_mean(ts_row, level, start, length):
     return ts_row, label
 
 
+def inject_spike(ts_row, level, start):
+    ts_row = np.array(ts_row)
+    label = np.zeros(len(ts_row))
+    start_a = int(len(ts_row) * start)
+    ts_row[start_a] = level
+    label[start_a] = 1
+    return ts_row, label
+
 def inject(anomaly_type, ts, config):
     if anomaly_type == 'platform':
         return inject_platform(ts, *config)
     elif anomaly_type == 'mean':
         return inject_mean(ts, *config)
+    elif anomaly_type == 'spike':
+        return inject_spike(ts, *config)
     else:
         raise Exception('Unsupported anomaly_type.')
 
