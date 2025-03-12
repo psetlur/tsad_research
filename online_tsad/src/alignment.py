@@ -64,11 +64,22 @@ def inject_mean(ts_row, level, start, length):
     return ts_row, label
 
 
+def inject_spike(ts_row, level, start):
+    ts_row = np.array(ts_row)
+    label = np.zeros(len(ts_row))
+    start_a = int(len(ts_row) * start)
+    ts_row[start_a] = level
+    label[start_a] = 1
+    return ts_row, label
+
+
 def inject(anomaly_type, ts, config):
     if anomaly_type == 'platform':
         return inject_platform(ts, *config)
     elif anomaly_type == 'mean':
         return inject_mean(ts, *config)
+    elif anomaly_type == 'spike':
+        return inject_spike(ts, config[0], config[1])
     else:
         raise Exception('Unsupported anomaly_type.')
 
@@ -122,11 +133,6 @@ def hist_sample(cdf, bins):
 
 
 def black_box_function(args, model, train_dataloader, val_dataloader, test_dataloader, a_config):
-    # ratio_0, ratio_1 = a_config['ratio_0'], a_config['ratio_1']
-    # ratio_anomaly = a_config['ratio_anomaly']
-    # fixed_level = a_config['fixed_level']
-    # fixed_length = a_config['fixed_length']
-    # fixed_start = a_config['fixed_start']
     ratio_anomaly = 0.1
     fixed_level = 0.5
     fixed_length = 0.3
@@ -135,7 +141,13 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
     valid_levels = np.round(np.arange(-1.0, 1.1, 0.1), 1)
     valid_lengths = np.round(np.arange(0.2, 0.52, 0.02), 2)
 
-    anomaly_types = ['platform', 'mean']
+    if args.trail == 'inject_spike':
+        anomaly_types = ['platform', 'mean', 'spike']
+    elif args.trail == 'second_anomaly':
+        anomaly_types = ['platform', 'mean']
+    else:
+        raise Exception('Unsupported trail.')
+
     with torch.no_grad():
         z_train, x_train_np = [], []
         for x_batch in train_dataloader:
@@ -183,29 +195,44 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
         valid_inlier_index, valid_outlier_index = train_test_split(range(len(x_valid_np)),
                                                                    train_size=1 - ratio_anomaly, random_state=0)
 
-        # test_index_0, test_index_1 = train_test_split(test_index, train_size=ratio_0/(ratio_0+ratio_1), random_state=seed)
+        # test_index_0, test_index_1 = train_test_split(test_index, train_size=ratio_0 / (ratio_0 + ratio_1),
+        #                                               random_state=seed)
 
-        x_aug_list, labels_list = list(), list()
+        x_train_aug, labels_train = dict(), dict()
         for anomaly_type in anomaly_types:
             x_aug, labels = list(), list()
             for i in train_outlier_index:
-                x = x_train_np[i]
                 # if np.random.random() > 0.5:
                 #     xa, l = inject_platform(x, fixed_level_0, fixed_start_0, fixed_length_0)
                 # else:
                 #     xa, l = inject_platform(x, fixed_level_1, fixed_start_1, fixed_length_1)
-                xa, l = inject(anomaly_type=anomaly_type, ts=x,
+                xa, l = inject(anomaly_type=anomaly_type, ts=x_train_np[i],
                                config=[fixed_level, np.random.uniform(0, 0.5), fixed_length])
                 x_aug.append(xa)
                 labels.append(l)
-            x_aug_list.append(x_aug)
-            labels_list.append(labels)
+            x_train_aug[anomaly_type] = x_aug
+            labels_train[anomaly_type] = labels
 
-        z_aug = model(torch.cat([torch.tensor(np.array(x_aug)).to(args.device)
-                                 for x_aug in x_aug_list], dim=0).float().unsqueeze(1)).detach()
-        z_train_t, z_valid_t, z_aug_t = emb(z_train[train_inlier_index].clone().squeeze(),
-                                            z_valid[valid_inlier_index].clone().squeeze(),
-                                            z_aug.clone().squeeze())
+        x_valid_aug, labels_valid = dict(), dict()
+        for anomaly_type in anomaly_types:
+            x_aug, labels = list(), list()
+            for i in valid_outlier_index:
+                xa, l = inject(anomaly_type=anomaly_type, ts=x_valid_np[i],
+                               config=[fixed_level, np.random.uniform(0, 0.5), fixed_length])
+                x_aug.append(xa)
+                labels.append(l)
+            x_valid_aug[anomaly_type] = x_aug
+            labels_valid[anomaly_type] = labels
+
+        z_aug_train = {anomaly_type: model(
+            torch.cat([torch.tensor(np.array(x_aug)).to(args.device)], dim=0).float().unsqueeze(1)).detach()
+                       for anomaly_type, x_aug in x_train_aug.items()}
+        z_aug_valid = {anomaly_type: model(
+            torch.cat([torch.tensor(np.array(x_aug)).to(args.device)], dim=0).float().unsqueeze(1)).detach()
+                       for anomaly_type, x_aug in x_valid_aug.items()}
+        z_train_t, z_valid_t, _ = emb(z_train[train_inlier_index].clone().squeeze(),
+                                      z_valid[valid_inlier_index].clone().squeeze(),
+                                      torch.cat([z_aug for z_aug in z_aug_train.values()], dim=0).squeeze())
 
         def argument(x_np, configs, outlier_index, config_name):
             x_configs_augs_dict, configs_labels_dict = dict(), dict()
@@ -214,14 +241,13 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
                 for config in configs:
                     x_augs, labels = list(), list()
                     for i in outlier_index:
+                        x = x_np[i]
                         if config_name == 'level':
-                            x_aug, label = inject(anomaly_type=anomaly_type, ts=x_np[i],
+                            x_aug, label = inject(anomaly_type=anomaly_type, ts=x,
                                                   config=[config, np.random.uniform(0, 0.5), fixed_length])
-                        elif config_name == 'length':
-                            x_aug, label = inject(anomaly_type=anomaly_type, ts=x_np[i],
+                        else:  # config_name == 'length'
+                            x_aug, label = inject(anomaly_type=anomaly_type, ts=x,
                                                   config=[fixed_level, np.random.uniform(0, 0.5), config])
-                        else:
-                            raise Exception('Unsupported config')
                         x_augs.append(x_aug)
                         labels.append(label)
                     x_configs_augs.append(x_augs)
@@ -256,6 +282,11 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
             model(torch.tensor(np.array(length_x_aug)).float().unsqueeze(1).to(args.device)).detach() for
             length_x_aug in x_valid_length_aug[anomaly_type]] for anomaly_type in anomaly_types}
 
+        z_aug_train_t = {anomaly_type: [emb.normalize(z_aug) for z_aug in z_aug_train[anomaly_type]] for
+                         anomaly_type in anomaly_types}
+        z_aug_valid_t = {anomaly_type: [emb.normalize(z_aug) for z_aug in z_aug_valid[anomaly_type]] for
+                         anomaly_type in anomaly_types}
+
         z_train_level_aug_t = {anomaly_type: [emb.normalize(z_aug) for z_aug in z_train_level_aug[anomaly_type]] for
                                anomaly_type in anomaly_types}
         z_train_length_aug_t = {anomaly_type: [emb.normalize(z_aug) for z_aug in z_train_length_aug[anomaly_type]]
@@ -276,52 +307,143 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
         #                   z_test_t.to(args.device))
         # f1score.append(f1_score(y_test.reshape(-1), y_pred.reshape(-1)))
 
-        # for anomaly_type in anomaly_types:
-        #     total_loss[anomaly_type] = dict()
-        #     f1score[anomaly_type] = dict()
-        #
-        #     total_loss[anomaly_type]['level'] = dict()
-        #     f1score[anomaly_type]['level'] = dict()
-        #     for i, train_level in enumerate(train_levels):
-        #         total_loss[anomaly_type]['level'][train_level] = dict()
-        #         f1score[anomaly_type]['level'][train_level] = dict()
-        #         classify_model = None
-        #         for j, valid_level in enumerate(valid_levels):
-        #             loss = W_loss(z_train_level_aug_t[anomaly_type][i], z_valid_level_aug_t[anomaly_type][j]).item()
-        #             total_loss[anomaly_type]['level'][train_level][valid_level] = loss
-        #
-        #             X = torch.cat([z_train_t, z_train_level_aug_t[anomaly_type][i]], dim=0)
-        #             y = torch.tensor(np.concatenate([np.zeros((len(train_inlier_index), x_train_np.shape[1])),
-        #                                              train_level_labels[anomaly_type][i]], axis=0)).to(args.device)
-        #             if classify_model is None:
-        #                 classify_model = train_classify_model(args=args, X_train=X, y_train=y)
-        #             y_pred = classify(model=classify_model, X_valid=z_valid_level_aug_t[anomaly_type][j].to(args.device))
-        #             f1 = f1_score(torch.tensor(valid_level_labels[anomaly_type][j]).reshape(-1), y_pred.reshape(-1))
-        #             f1score[anomaly_type]['level'][train_level][valid_level] = f1
-        #
-        #             print(f'train_level: {train_level}, valid_level: {valid_level}, wd: {loss}, f1score: {f1}')
-        #
-        #     total_loss[anomaly_type]['length'] = dict()
-        #     f1score[anomaly_type]['length'] = dict()
-        #     for i, train_length in enumerate(train_lengths):
-        #         total_loss[anomaly_type]['length'][train_length] = dict()
-        #         f1score[anomaly_type]['length'][train_length] = dict()
-        #         classify_model = None
-        #         for j, valid_length in enumerate(valid_lengths):
-        #             loss = W_loss(z_train_length_aug_t[anomaly_type][i], z_valid_length_aug_t[anomaly_type][j]).item()
-        #             total_loss[anomaly_type]['length'][train_length][valid_length] = loss
-        #
-        #             X = torch.cat([z_train_t, z_train_length_aug_t[anomaly_type][i]], dim=0)
-        #             y = torch.tensor(np.concatenate(
-        #                 [np.zeros((len(train_inlier_index), x_train_np.shape[1])), train_length_labels[anomaly_type][i]],
-        #                 axis=0)).to(args.device)
-        #             if classify_model is None:
-        #                 classify_model = train_classify_model(args=args, X_train=X, y_train=y)
-        #             y_pred = classify(model=classify_model, X_valid=z_valid_length_aug_t[anomaly_type][j].to(args.device))
-        #             f1 = f1_score(torch.tensor(valid_length_labels[anomaly_type][j]).reshape(-1), y_pred.reshape(-1))
-        #             f1score[anomaly_type]['length'][train_length][valid_length] = f1
-        #
-        #             print(f'train_length: {train_length}, valid_length: {valid_length}, wd: {loss}, f1score: {f1}')
+        for train_anomaly in anomaly_types:
+            total_loss[train_anomaly] = dict()
+            f1score[train_anomaly] = dict()
+            other_train_anomaly = torch.cat(
+                [torch.stack(z_aug_train_t[anomaly_type])
+                 for anomaly_type in anomaly_types if anomaly_type != train_anomaly], dim=0)
+            other_train_labels = np.concatenate(
+                [np.vstack(labels_train[anomaly_type]) for anomaly_type in anomaly_types
+                 if anomaly_type != train_anomaly], axis=0)
+
+            total_loss[train_anomaly]['level'] = dict()
+            f1score[train_anomaly]['level'] = dict()
+            for i, train_level in enumerate(train_levels):
+                total_loss[train_anomaly]['level'][train_level] = dict()
+                f1score[train_anomaly]['level'][train_level] = dict()
+                classify_model = None
+
+                for valid_anomaly in anomaly_types:
+                    total_loss[train_anomaly]['level'][train_level][valid_anomaly] = dict()
+                    f1score[train_anomaly]['level'][train_level][valid_anomaly] = dict()
+                    other_valid_anomaly = torch.cat(
+                        [torch.stack(z_aug_valid_t[anomaly_type])
+                         for anomaly_type in anomaly_types if anomaly_type != valid_anomaly], dim=0)
+                    other_valid_labels = np.concatenate(
+                        [np.vstack(labels_valid[anomaly_type]) for anomaly_type in anomaly_types
+                         if anomaly_type != valid_anomaly], axis=0)
+
+                    total_loss[train_anomaly]['level'][train_level][valid_anomaly]['level'] = dict()
+                    f1score[train_anomaly]['level'][train_level][valid_anomaly]['level'] = dict()
+                    for j, valid_level in enumerate(valid_levels):
+                        loss = W_loss(
+                            torch.cat([z_train_level_aug_t[train_anomaly][i], other_train_anomaly], dim=0),
+                            torch.cat([z_valid_level_aug_t[valid_anomaly][j], other_valid_anomaly], dim=0)).item()
+                        total_loss[train_anomaly]['level'][train_level][valid_anomaly]['level'][valid_level] = loss
+                        if classify_model is None:
+                            X = torch.cat(
+                                [z_train_t, z_train_level_aug_t[train_anomaly][i], other_train_anomaly], dim=0)
+                            y = torch.tensor(np.concatenate(
+                                [np.zeros((len(train_inlier_index), x_train_np.shape[1])),
+                                 train_level_labels[train_anomaly][i], other_train_labels], axis=0)).to(args.device)
+                            classify_model = train_classify_model(args=args, X_train=X, y_train=y)
+                        y_pred = classify(model=classify_model, X_valid=torch.cat(
+                            [z_valid_level_aug_t[valid_anomaly][j], other_valid_anomaly], dim=0).to(args.device))
+                        f1 = f1_score(torch.tensor(
+                            np.concatenate([valid_level_labels[valid_anomaly][j], other_valid_labels], axis=0)).reshape(
+                            -1), y_pred.reshape(-1))
+                        f1score[train_anomaly]['level'][train_level][valid_anomaly]['level'][valid_level] = f1
+                        print(f'train_anomaly.level: {train_anomaly}.{train_level}, '
+                              f'valid_anomaly.level: {valid_anomaly}.{valid_level}, wd: {loss}, f1score: {f1}')
+
+                    total_loss[train_anomaly]['level'][train_level][valid_anomaly]['length'] = dict()
+                    f1score[train_anomaly]['level'][train_level][valid_anomaly]['length'] = dict()
+                    for j, valid_length in enumerate(valid_lengths):
+                        loss = W_loss(
+                            torch.cat([z_train_level_aug_t[train_anomaly][i], other_train_anomaly], dim=0),
+                            torch.cat([z_valid_length_aug_t[valid_anomaly][j], other_valid_anomaly], dim=0)).item()
+                        total_loss[train_anomaly]['level'][train_level][valid_anomaly]['length'][valid_length] = loss
+                        if classify_model is None:
+                            X = torch.cat(
+                                [z_train_t, z_train_level_aug_t[train_anomaly][i], other_train_anomaly], dim=0)
+                            y = torch.tensor(np.concatenate(
+                                [np.zeros((len(train_inlier_index), x_train_np.shape[1])),
+                                 train_level_labels[train_anomaly][i], other_train_labels], axis=0)).to(args.device)
+                            classify_model = train_classify_model(args=args, X_train=X, y_train=y)
+                        y_pred = classify(model=classify_model, X_valid=torch.cat(
+                            [z_valid_length_aug_t[valid_anomaly][j], other_valid_anomaly], dim=0).to(args.device))
+                        f1 = f1_score(torch.tensor(
+                            np.concatenate([valid_length_labels[valid_anomaly][j], other_valid_labels],
+                                           axis=0)).reshape(-1), y_pred.reshape(-1))
+                        f1score[train_anomaly]['level'][train_level][valid_anomaly]['length'][valid_length] = f1
+                        print(f'train_anomaly.level: {train_anomaly}.{train_level}, '
+                              f'valid_anomaly.length: {valid_anomaly}.{valid_length}, wd: {loss}, f1score: {f1}')
+
+            total_loss[train_anomaly]['length'] = dict()
+            f1score[train_anomaly]['length'] = dict()
+            for i, train_length in enumerate(train_lengths):
+                total_loss[train_anomaly]['length'][train_length] = dict()
+                f1score[train_anomaly]['length'][train_length] = dict()
+                classify_model = None
+
+                for valid_anomaly in anomaly_types:
+                    total_loss[train_anomaly]['length'][train_length][valid_anomaly] = dict()
+                    f1score[train_anomaly]['length'][train_length][valid_anomaly] = dict()
+                    other_valid_anomaly = torch.cat(
+                        [torch.stack(z_aug_valid_t[anomaly_type])
+                         for anomaly_type in anomaly_types if anomaly_type != valid_anomaly], dim=0)
+                    other_valid_labels = np.concatenate(
+                        [np.vstack(labels_valid[anomaly_type]) for anomaly_type in anomaly_types
+                         if anomaly_type != valid_anomaly], axis=0)
+
+                    total_loss[train_anomaly]['length'][train_length][valid_anomaly]['level'] = dict()
+                    f1score[train_anomaly]['length'][train_length][valid_anomaly]['level'] = dict()
+                    for j, valid_level in enumerate(valid_levels):
+                        loss = W_loss(
+                            torch.cat([z_train_length_aug_t[train_anomaly][i], other_train_anomaly], dim=0),
+                            torch.cat([z_valid_level_aug_t[valid_anomaly][j], other_valid_anomaly], dim=0)).item()
+                        total_loss[train_anomaly]['length'][train_length][valid_anomaly]['level'][valid_level] = loss
+                        if classify_model is None:
+                            X = torch.cat(
+                                [z_train_t, z_train_length_aug_t[train_anomaly][i], other_train_anomaly], dim=0)
+                            y = torch.tensor(np.concatenate(
+                                [np.zeros((len(train_inlier_index), x_train_np.shape[1])),
+                                 train_length_labels[train_anomaly][i], other_train_labels], axis=0)).to(args.device)
+                            classify_model = train_classify_model(args=args, X_train=X, y_train=y)
+                        y_pred = classify(model=classify_model, X_valid=torch.cat(
+                            [z_valid_level_aug_t[valid_anomaly][j], other_valid_anomaly], dim=0).to(args.device))
+                        f1 = f1_score(torch.tensor(
+                            np.concatenate([valid_level_labels[valid_anomaly][j], other_valid_labels], axis=0)).reshape(
+                            -1), y_pred.reshape(-1))
+                        f1score[train_anomaly]['length'][train_length][valid_anomaly]['level'][valid_level] = f1
+                        print(f'train_anomaly.length: {train_anomaly}.{train_length}, '
+                              f'valid_anomaly.level: {valid_anomaly}.{valid_level}, wd: {loss}, f1score: {f1}')
+
+                    total_loss[train_anomaly]['length'][train_length][valid_anomaly]['length'] = dict()
+                    f1score[train_anomaly]['length'][train_length][valid_anomaly]['length'] = dict()
+                    for j, valid_length in enumerate(valid_lengths):
+                        loss = W_loss(
+                            torch.cat([z_train_length_aug_t[train_anomaly][i], other_train_anomaly], dim=0),
+                            torch.cat([z_valid_length_aug_t[valid_anomaly][j], other_valid_anomaly], dim=0)).item()
+                        total_loss[train_anomaly]['length'][train_length][valid_anomaly]['length'][valid_length] = loss
+                        if classify_model is None:
+                            X = torch.cat(
+                                [z_train_t, z_train_length_aug_t[train_anomaly][i], other_train_anomaly], dim=0)
+                            y = torch.tensor(np.concatenate(
+                                [np.zeros((len(train_inlier_index), x_train_np.shape[1])),
+                                 train_length_labels[train_anomaly][i], other_train_labels], axis=0)
+                            ).to(args.device)
+                            classify_model = train_classify_model(args=args, X_train=X, y_train=y)
+                        y_pred = classify(model=classify_model, X_valid=torch.cat(
+                            [z_valid_length_aug_t[valid_anomaly][j], other_valid_anomaly], dim=0).to(args.device))
+                        f1 = f1_score(torch.tensor(
+                            np.concatenate([valid_length_labels[valid_anomaly][j], other_valid_labels],
+                                           axis=0)).reshape(
+                            -1), y_pred.reshape(-1))
+                        f1score[train_anomaly]['length'][train_length][valid_anomaly]['length'][valid_length] = f1
+                        print(f'train_anomaly.length: {train_anomaly}.{train_length}, '
+                              f'valid_anomaly.length: {valid_anomaly}.{valid_length}, wd: {loss}, f1score: {f1}')
 
         # for anomaly_type in anomaly_types:
         #     # with test
@@ -341,14 +463,15 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
         #               anomaly_type=anomaly_type)
         #     visualize(train_inlier=z_train, valid_inlier=z_valid, train_augs=z_train_length_aug[anomaly_type],
         #               valid_augs=None, train_configs=train_lengths, valid_configs=None, config_name='length',
-        #               fixed_config=f'fixed_level{fixed_level}', trail=args.trail, test=False, anomaly_type=anomaly_type)
+        #               fixed_config=f'fixed_level{fixed_level}', trail=args.trail, test=False,
+        # anomaly_type = anomaly_type)
 
-        outlier = {'train': {'level': z_train_level_aug_t, 'length': z_train_length_aug_t},
-                   'valid': {'level': z_valid_level_aug_t, 'length': z_valid_length_aug_t}}
-        inlier = {'train': z_train, 'valid': z_valid}
-        configs = {'level': train_levels, 'length': train_lengths}
-        visualize_multiple(inlier=inlier, outlier=outlier, configs=configs, trail=args.trail,
-                           anomaly_types=anomaly_types)
+        # outlier = {'train': {'level': z_train_level_aug_t, 'length': z_train_length_aug_t},
+        #            'valid': {'level': z_valid_level_aug_t, 'length': z_valid_length_aug_t}}
+        # inlier = {'train': z_train, 'valid': z_valid}
+        # configs = {'level': train_levels, 'length': train_lengths}
+        # visualize_multiple(inlier=inlier, outlier=outlier, configs=configs, trail=args.trail,
+        #                    anomaly_types=anomaly_types)
 
     return total_loss, f1score
 
@@ -574,10 +697,12 @@ def visualize_multiple(inlier, outlier, configs, trail, anomaly_types):
 #                        markerfacecolor=colors[i], markersize=10))
 #
 #             # if converse == 1:
-#             #     plt.scatter(xt[start_idx:end_idx, 0], xt[start_idx:end_idx, 1], c=[colors[i]] * (end_idx - start_idx),
+#             #     plt.scatter(xt[start_idx:end_idx, 0], xt[start_idx:end_idx, 1], c=[colors[i]] * (end_idx -
+#             start_idx),
 #             #                 alpha=0.5)
 #             # else:
-#             #     plt.scatter(xt[start_idx:end_idx, 0], xt[start_idx:end_idx, 1], c=[colors[i]] * (end_idx - start_idx),
+#             #     plt.scatter(xt[start_idx:end_idx, 0], xt[start_idx:end_idx, 1], c=[colors[i]] * (end_idx -
+#             start_idx),
 #             #                 alpha=0.5, zorder=len(valid_configs) - i)
 #
 #     plt.legend(handles=legend_elements, loc="upper left", bbox_to_anchor=(1, 1))

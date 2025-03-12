@@ -71,11 +71,13 @@ class Encoder(pl.LightningModule):
         self.normal_idx = set()
         self.normal_x = torch.tensor([]).to(device)
 
-        if self.args.trail == 'second_anomaly':
-            self.anomaly_types = ['platform', 'mean']
-        elif self.args.trail in ['fixed', 'grid', 'more_epochs', 'second_loss', 'length_optimized', 'more_negative',
-                                 'warmup']:
+        if self.args.trail in ['fixed', 'grid', 'more_epochs', 'second_loss', 'length_optimized', 'more_negative',
+                               'warmup']:
             self.anomaly_types = ['platform']
+        elif self.args.trail == 'second_anomaly':
+            self.anomaly_types = ['platform', 'mean']
+        elif self.args.trail == 'inject_spike':
+            self.anomaly_types = ['platform', 'mean', 'spike']
         else:
             raise Exception('Unsupported trail.')
 
@@ -95,11 +97,18 @@ class Encoder(pl.LightningModule):
         ts_row[start: start + length] += float(level)
         return ts_row
 
+    def inject_spike(self, ts_row, level, start):
+        start_idx = int(len(ts_row) * start)
+        ts_row[start_idx] = float(level)
+        return ts_row
+
     def inject(self, anomaly_type, ts, config):
         if anomaly_type == 'platform':
             return self.inject_platform(ts, *config)
         elif anomaly_type == 'mean':
             return self.inject_mean(ts, *config)
+        elif anomaly_type == 'spike':
+            return self.inject_spike(ts, config[0], config[1])
         else:
             raise Exception('Unsupported anomaly_type.')
 
@@ -111,25 +120,22 @@ class Encoder(pl.LightningModule):
         for anomaly_type in self.anomaly_types:
             y, y_pos = x.clone(), x.clone()
             meta, meta_pos = list(), list()
-            if self.args.trail in ['more_negative', 'warmup', 'second_anomaly']:
+            if self.args.trail in ['more_negative', 'warmup', 'second_anomaly', 'inject_spike']:
                 y_neg = [x.clone() for _ in range(NUM_NEGATIVE)]
                 meta_neg = [list() for _ in range(NUM_NEGATIVE)]
-            elif self.args.trail in ['fixed', 'grid', 'more_epochs', 'second_loss', 'length_optimized']:
+            else:  # self.args.trail in ['fixed', 'grid', 'more_epochs', 'second_loss', 'length_optimized']
                 y_neg = x.clone()
                 meta_neg = list()
-            else:
-                raise Exception('Unsupported trail.')
 
             for i in range(len(x)):
-                # m = [hist_sample(level_0_cdf, LEVEL_BINS), np.random.uniform(0, 0.5), hist_sample(length_0_cdf, LENGTH_BINS)]
-                if self.args.trail == 'fixed':
-                    m = [FIXED_LEVEL, np.random.uniform(0, 0.5), FIXED_LENGTH]
-                elif self.args.trail in ['grid', 'more_epochs', 'second_loss', 'more_negative', 'warmup',
-                                         'length_optimized', 'second_anomaly']:
+                # m = [hist_sample(level_0_cdf, LEVEL_BINS), np.random.uniform(0, 0.5), hist_sample(length_0_cdf,
+                # LENGTH_BINS)]
+                if self.args.trail in ['grid', 'more_epochs', 'second_loss', 'more_negative', 'warmup',
+                                       'length_optimized', 'second_anomaly', 'inject_spike']:
                     m = [config_from_grid(CDF_LEVEL, GRID_LEVEL), np.random.uniform(0, 0.5),
                          config_from_grid(CDF_LENGTH, GRID_LENGTH)]
-                else:
-                    raise Exception('Unsupported trail.')
+                else:  # self.args.trail == 'fixed'
+                    m = [FIXED_LEVEL, np.random.uniform(0, 0.5), FIXED_LENGTH]
                 y[i][0] = self.inject(anomaly_type=anomaly_type, ts=y[i][0], config=m)
                 meta.append(m)
 
@@ -140,7 +146,7 @@ class Encoder(pl.LightningModule):
                     s0 = min(s0, 1.0)
                     s2 = max(m[2] + np.random.uniform(low=-TAU_LENGTH, high=TAU_LENGTH), 0.20)
                     s2 = min(s2, 0.50)
-                elif self.args.trail in ['more_negative', 'warmup', 'second_anomaly']:
+                elif self.args.trail in ['more_negative', 'warmup', 'second_anomaly', 'inject_spike']:
                     s0 = m[0] + np.random.uniform(low=-TAU_LEVEL, high=TAU_LEVEL)
                     s2 = max(m[2] + np.random.uniform(low=-TAU_LENGTH, high=TAU_LENGTH), 0)
                 elif self.args.trail in ['fixed', 'grid', 'more_epochs', 'second_loss']:
@@ -162,7 +168,7 @@ class Encoder(pl.LightningModule):
                                 (m[2] - 0.20) / 0.30) else np.random.uniform(low=m[2] + TAU_LENGTH, high=0.50)
                         y_neg[i][0] = self.inject_platform(y_neg[i][0], s0_neg, s1_neg, s2_neg)
                         meta_neg.append([s0_neg, s1_neg, s2_neg])
-                    elif self.args.trail in ['more_negative', 'warmup', 'second_anomaly']:
+                    elif self.args.trail in ['more_negative', 'warmup', 'second_anomaly', 'inject_spike']:
                         s0_neg = m[0] + np.random.uniform(low=-RANGE_LEVEL, high=-TAU_LEVEL) \
                             if np.random.random() > 0.5 else m[0] + np.random.uniform(low=TAU_LEVEL, high=RANGE_LEVEL)
                         s2_neg = max(m[2] + np.random.uniform(low=-RANGE_LENGTH, high=-TAU_LENGTH)
@@ -188,16 +194,15 @@ class Encoder(pl.LightningModule):
 
             c_y_dict[anomaly_type] = self(y)
             c_y_pos_dict[anomaly_type] = self(y_pos)
-            if self.args.trail in ['more_negative', 'warmup', 'second_anomaly']:
+            if self.args.trail in ['more_negative', 'warmup', 'second_anomaly', 'inject_spike']:
                 c_y_neg_dict[anomaly_type] = [self(y_neg[i]) for i in range(NUM_NEGATIVE)]
-            elif self.args.trail in ['fixed', 'grid', 'more_epochs', 'second_loss', 'length_optimized']:
+            else:  # self.args.trail in ['fixed', 'grid', 'more_epochs', 'second_loss', 'length_optimized']
                 c_y_neg_dict[anomaly_type] = self(y_neg)
-            else:
-                raise Exception('Unsupported trail.')
             meta_dict[anomaly_type] = meta
             meta_neg_dict[anomaly_type] = meta_neg
 
-        ### Anomalies should be close to the ones with the same type and similar hyperparameters, and far away from the ones with different types and normal.
+        ### Anomalies should be close to the ones with the same type and similar hyperparameters, and far away from
+        # the ones with different types and normal.
         loss_global = 0
         if len(self.anomaly_types) == 1:
             loss_global += self.info_loss(c_y_dict[self.anomaly_types[0]], c_y_pos_dict[self.anomaly_types[0]],
@@ -214,10 +219,7 @@ class Encoder(pl.LightningModule):
         loss_global /= len(self.anomaly_types)
 
         ### Anomalies with far away hyperparameters should be far away propotional to delta.
-        if self.args.trail in ['second_loss', 'length_optimized']:
-            # loss_local = self.info_loss(c_y, c_y_pos, c_y_neg)
-            loss_local = 0
-        elif self.args.trail in ['more_negative', 'warmup', 'second_anomaly']:
+        if self.args.trail in ['more_negative', 'warmup', 'second_anomaly', 'inject_spike']:
             loss_local = 0
             for anomaly_type in self.anomaly_types:
                 loss_local += sum([hard_negative_loss(c_y_dict[anomaly_type], c_y_pos_dict[anomaly_type],
@@ -226,19 +228,18 @@ class Encoder(pl.LightningModule):
                                                       np.array(meta_neg_dict[anomaly_type][i]))
                                    for i in range(NUM_NEGATIVE)]) / NUM_NEGATIVE
             loss_local /= len(self.anomaly_types)
-        elif self.args.trail in ['fixed', 'grid', 'more_epochs']:
+        else:
+            # self.args.trail in ['second_loss', 'length_optimized']
+            # loss_local = self.info_loss(c_y, c_y_pos, c_y_neg)
+            # self.args.trail in ['fixed', 'grid', 'more_epochs']
             # loss_local = hard_negative_loss(c_y, c_y_pos, c_y_neg, np.array(meta), np.array(meta_neg))
             loss_local = 0
-        else:
-            raise Exception('Unsupported trail.')
 
         ### Nomral should be close to each other, and far away from anomalies.
-        if self.args.trail in ['more_negative', 'warmup', 'second_anomaly']:
+        if self.args.trail in ['more_negative', 'warmup', 'second_anomaly', 'inject_spike']:
             c_y_neg_dict = [torch.cat(c_y_neg_dict[anomaly_type], dim=0) for anomaly_type in self.anomaly_types]
-        elif self.args.trail in ['fixed', 'grid', 'more_epochs', 'second_loss', 'length_optimized']:
+        else:  # self.args.trail in ['fixed', 'grid', 'more_epochs', 'second_loss', 'length_optimized']
             c_y_neg_dict = [c_y_neg_dict[anomaly_type] for anomaly_type in self.anomaly_types]
-        else:
-            raise Exception('Unsupported trail.')
         loss_normal = self.info_loss(c_x, c_x_pos, torch.cat(
             [torch.cat(list(c_y_dict.values()), dim=0), torch.cat(list(c_y_pos_dict.values()), dim=0),
              torch.cat(c_y_neg_dict, dim=0)], dim=0))
@@ -257,11 +258,9 @@ class Encoder(pl.LightningModule):
                 weight_global = 1.0
                 weight_local = 1.0
             loss = weight_global * loss_global + weight_local * loss_local + weight_normal * loss_normal
-        elif self.args.trail in ['fixed', 'grid', 'more_epochs', 'second_loss', 'length_optimized', 'more_negative',
-                                 'second_anomaly']:
+        else:  # self.args.trail in ['fixed', 'grid', 'more_epochs', 'second_loss', 'length_optimized',
+            # 'more_negative', 'second_anomaly','inject_spike']:
             loss = loss_global + loss_local + loss_normal
-        else:
-            raise Exception('Unsupported trail.')
 
         if loss_global > 0:
             pass

@@ -44,7 +44,8 @@ if __name__ == "__main__":
     # parser.add_argument("--trail", type=str, default='length_optimized')
     # parser.add_argument("--trail", type=str, default='more_negative')
     # parser.add_argument("--trail", type=str, default='warmup')
-    parser.add_argument("--trail", type=str, default='second_anomaly')
+    # parser.add_argument("--trail", type=str, default='second_anomaly')
+    parser.add_argument("--trail", type=str, default='inject_spike')
     # parser.add_argument("--device", type=str, default='cpu')
     parser.add_argument("--device", type=str, default='cuda:0')
     parser.add_argument(
@@ -155,7 +156,8 @@ if __name__ == "__main__":
     #     #     target, f1score = -10, 0
     #     # else:
     #     #     model = train_model(args, m_config, train_dataloader, trainval_dataloader, next_point_to_probe)
-    #     #     target, f1score = black_box_function(model, train_dataloader, val_dataloader, test_dataloader, next_point_to_probe)
+    #     #     target, f1score = black_box_function(model, train_dataloader, val_dataloader, test_dataloader,
+    #     next_point_to_probe)
     #     print("Found the target value to be:", target)
     #     print("Test F1-Score:", f1score)
 
