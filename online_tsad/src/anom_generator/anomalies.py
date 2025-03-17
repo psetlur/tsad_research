@@ -105,7 +105,7 @@ class AnomFuncs:
         level_r = np.digitize(np.random.random(1), bins=cdf)[0]
         level = np.random.uniform(LEVEL_BINS[level_r - 1], LEVEL_BINS[level_r])
 
-        ts_row[start_index] = level
+        ts_row[start_index] += level
 
         return ts_row, start_index, 1, level
 

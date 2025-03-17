@@ -3,13 +3,6 @@ import pandas as pd
 import numpy as np
 import ast
 
-# trail = 'fixed'
-# trail = 'grid'
-# trail = 'more_epochs'
-# trail = 'second_loss'
-# trail = 'length_optimized'
-# trail = 'more_negative'
-# trail = 'warmup'
 # trail = 'second_anomaly'
 trail = 'inject_spike'
 
@@ -108,205 +101,110 @@ def plot_wd_f1score():
         plot_heatmap(data=length_f1, title=f'{anomaly_type} F1-score', config_name='length')
 
 
-def plot_wd_f1score_combined():
-    with open(f"logs/training/{trail}/wd_f1score.txt", "r") as f:
-        lines = f.readlines()
-        wd = ast.literal_eval(lines[0][4:])
-        f1score = ast.literal_eval(lines[1][9:])
-
-    levels = np.round(np.arange(-1.0, 1.1, 0.1), 1)
-    lengths = np.round(np.arange(0.20, 0.52, 0.02), 2)
-    if trail == 'inject_spike':
-        anomaly_types = ['platform', 'mean', 'spike']
-    elif trail == 'second_anomaly':
-        anomaly_types = ['platform', 'mean']
-    else:
-        raise Exception('Unsupported trail.')
-    fixed_config = {'platform': {'level': 0.5, 'length': 0.3}, 'mean': {'level': 0.5, 'length': 0.3}}
-    configs = {'level': levels, 'length': lengths}
-    coordinate = list()
-    n = 0
-    if trail == 'inject_spike':
-        for anomaly_type in anomaly_types:
-            if anomaly_type == 'platform':
-                for config in configs['level']:
-                    n += 1
-                    coordinate.append(
-                        f"({config}, {fixed_config['platform']['length']}, {fixed_config['mean']['level']}, "
-                        f"{fixed_config['mean']['length']})/ {n}")
-                for config in configs['length']:
-                    n += 1
-                    coordinate.append(
-                        f"({fixed_config['platform']['level']}, {config}, {fixed_config['mean']['level']}, "
-                        f"{fixed_config['mean']['length']})/ {n}")
-            elif anomaly_type == 'mean':
-                for config in configs['level']:
-                    n += 1
-                    coordinate.append(f"({fixed_config['platform']['level']}, {fixed_config['platform']['length']}, "
-                                      f"{config}, {fixed_config['mean']['length']})/ {n}")
-                for config in configs['length']:
-                    n += 1
-                    coordinate.append(f"({fixed_config['platform']['level']}, {fixed_config['platform']['length']}, "
-                                      f"{fixed_config['mean']['level']}, {config})/ {n}")
-            else:
-                for config in configs['level']:
-                    n += 1
-                    coordinate.append(f"({fixed_config['platform']['level']}, {fixed_config['platform']['length']}, "
-                                      f"{config}, {fixed_config['mean']['length']})/ {n}")
-                for config in configs['length']:
-                    n += 1
-                    coordinate.append(f"({fixed_config['platform']['level']}, {fixed_config['platform']['length']}, "
-                                      f"{fixed_config['mean']['level']}, {config})/ {n}")
-
-    else:  # trail == 'second_anomaly'
-        for anomaly_type in anomaly_types:
-            if anomaly_type == 'platform':
-                for config in configs['level']:
-                    n += 1
-                    coordinate.append(
-                        f"({config}, {fixed_config['platform']['length']}, {fixed_config['mean']['level']}, "
-                        f"{fixed_config['mean']['length']})/ {n}")
-                for config in configs['length']:
-                    n += 1
-                    coordinate.append(
-                        f"({fixed_config['platform']['level']}, {config}, {fixed_config['mean']['level']}, "
-                        f"{fixed_config['mean']['length']})/ {n}")
-            else:
-                for config in configs['level']:
-                    n += 1
-                    coordinate.append(f"({fixed_config['platform']['level']}, {fixed_config['platform']['length']}, "
-                                      f"{config}, {fixed_config['mean']['length']})/ {n}")
-                for config in configs['length']:
-                    n += 1
-                    coordinate.append(f"({fixed_config['platform']['level']}, {fixed_config['platform']['length']}, "
-                                      f"{fixed_config['mean']['level']}, {config})/ {n}")
-
-    def plot_heatmap(data, title):
-        x = np.arange(len(coordinate))
-        y = np.arange(len(coordinate))
-
-        values = np.zeros((len(coordinate), len(coordinate)))
-        levels_num = len(levels)
-        lengths_num = len(lengths)
-
-        for i1, train_anomaly in enumerate(anomaly_types):
-            for train_config_name in data[train_anomaly].keys():
-                for i2, train_config in enumerate(data[train_anomaly][train_config_name].keys()):
-                    for j1, valid_anomaly in enumerate(anomaly_types):
-                        for valid_config_name in data[train_anomaly][train_config_name][train_config][
-                            valid_anomaly].keys():
-                            for j2, valid_config in enumerate(data[train_anomaly][train_config_name][train_config][
-                                                                  valid_anomaly][valid_config_name].keys()):
-                                i = i1 * (levels_num + lengths_num)
-                                j = j1 * (levels_num + lengths_num)
-                                if train_config_name == 'level':
-                                    i += i2
-                                else:  # train_config_name == 'length'
-                                    i += levels_num + i2
-                                if valid_config_name == 'level':
-                                    j += j2
-                                else:  # valid_config_name == 'length'
-                                    j += levels_num + j2
-
-                                values[i, j] = data[train_anomaly][train_config_name][train_config][valid_anomaly][
-                                    valid_config_name][valid_config]
-
-        plt.figure(figsize=(20, 16))
-        plt.pcolormesh(x, y, np.ma.masked_where(values == 0, values), cmap="viridis",
-                       vmin=np.min(values), vmax=np.max(values))
-        if title[-2:] == 'WD':
-            for i in range(values.shape[1]):
-                column = values[i, :]
-                min_index = np.argmin(column)
-                plt.scatter(i, min_index, color='red', s=50, edgecolor='black', label='Min Value')
-        else:
-            for i in range(values.shape[1]):
-                column = values[i, :]
-                max_index = np.argmax(column)
-                plt.scatter(i, max_index, color='red', s=50, edgecolor='black', label='Max Value')
-        plt.xticks(ticks=x, labels=coordinate, rotation=90)
-        plt.yticks(ticks=y, labels=coordinate)
-        plt.colorbar(label='Value')
-        plt.xlabel(f'train')
-        plt.ylabel(f'test')
-        plt.title(title)
-        handles, labels = plt.gca().get_legend_handles_labels()
-        by_label = dict(zip(labels, handles))
-        plt.legend(by_label.values(), by_label.keys(), loc='upper left')
-        plt.savefig(f'logs/training/{trail}/{title}.pdf')
-        plt.show()
-
-        # import plotly.express as px
-        #
-        # import pandas as pd
-        # df = pd.DataFrame(values, index=coordinate, columns=coordinate)
-        #
-        # fig = px.imshow(df, text_auto=False, color_continuous_scale='Viridis')
-        # fig.show()
-
-    plot_heatmap(data=wd, title=f'WD')
-    plot_heatmap(data=f1score, title=f'F1-score')
-
-
-# import numpy as np
-# import matplotlib.pyplot as plt
-# import ast
-
+#
 # def plot_wd_f1score_combined():
-#     # 读取数据
 #     with open(f"logs/training/{trail}/wd_f1score.txt", "r") as f:
 #         lines = f.readlines()
 #         wd = ast.literal_eval(lines[0][4:])
 #         f1score = ast.literal_eval(lines[1][9:])
 #
-#     # 定义参数范围
 #     levels = np.round(np.arange(-1.0, 1.1, 0.1), 1)
 #     lengths = np.round(np.arange(0.20, 0.52, 0.02), 2)
-#     anomaly_types = ['platform', 'mean']
+#     if trail == 'inject_spike':
+#         anomaly_types = ['platform', 'mean', 'spike']
+#     elif trail == 'second_anomaly':
+#         anomaly_types = ['platform', 'mean']
+#     else:
+#         raise Exception('Unsupported trail.')
+#     fixed_config = {'platform': {'level': 0.5, 'length': 0.3}, 'mean': {'level': 0.5, 'length': 0.3}}
 #     configs = {'level': levels, 'length': lengths}
-#
-#     # 生成所有组合
-#     coordinate = []
-#     for platform_level in configs['level']:
-#         for platform_length in configs['length']:
-#             for mean_level in configs['level']:
-#                 for mean_length in configs['length']:
+#     coordinate = list()
+#     n = 0
+#     if trail == 'inject_spike':
+#         for anomaly_type in anomaly_types:
+#             if anomaly_type == 'platform':
+#                 for config in configs['level']:
+#                     n += 1
 #                     coordinate.append(
-#                         f"(level_platform={platform_level}, length_platform={platform_length}, "
-#                         f"level_mean={mean_level}, length_mean={mean_length})")
+#                         f"({config}, {fixed_config['platform']['length']}, {fixed_config['mean']['level']}, "
+#                         f"{fixed_config['mean']['length']})/ {n}")
+#                 for config in configs['length']:
+#                     n += 1
+#                     coordinate.append(
+#                         f"({fixed_config['platform']['level']}, {config}, {fixed_config['mean']['level']}, "
+#                         f"{fixed_config['mean']['length']})/ {n}")
+#             elif anomaly_type == 'mean':
+#                 for config in configs['level']:
+#                     n += 1
+#                     coordinate.append(f"({fixed_config['platform']['level']}, {fixed_config['platform']['length']}, "
+#                                       f"{config}, {fixed_config['mean']['length']})/ {n}")
+#                 for config in configs['length']:
+#                     n += 1
+#                     coordinate.append(f"({fixed_config['platform']['level']}, {fixed_config['platform']['length']}, "
+#                                       f"{fixed_config['mean']['level']}, {config})/ {n}")
+#             else:
+#                 for config in configs['level']:
+#                     n += 1
+#                     coordinate.append(f"({fixed_config['platform']['level']}, {fixed_config['platform']['length']}, "
+#                                       f"{config}, {fixed_config['mean']['length']})/ {n}")
+#                 for config in configs['length']:
+#                     n += 1
+#                     coordinate.append(f"({fixed_config['platform']['level']}, {fixed_config['platform']['length']}, "
+#                                       f"{fixed_config['mean']['level']}, {config})/ {n}")
+#
+#     else:  # trail == 'second_anomaly'
+#         for anomaly_type in anomaly_types:
+#             if anomaly_type == 'platform':
+#                 for config in configs['level']:
+#                     n += 1
+#                     coordinate.append(
+#                         f"({config}, {fixed_config['platform']['length']}, {fixed_config['mean']['level']}, "
+#                         f"{fixed_config['mean']['length']})/ {n}")
+#                 for config in configs['length']:
+#                     n += 1
+#                     coordinate.append(
+#                         f"({fixed_config['platform']['level']}, {config}, {fixed_config['mean']['level']}, "
+#                         f"{fixed_config['mean']['length']})/ {n}")
+#             else:
+#                 for config in configs['level']:
+#                     n += 1
+#                     coordinate.append(f"({fixed_config['platform']['level']}, {fixed_config['platform']['length']}, "
+#                                       f"{config}, {fixed_config['mean']['length']})/ {n}")
+#                 for config in configs['length']:
+#                     n += 1
+#                     coordinate.append(f"({fixed_config['platform']['level']}, {fixed_config['platform']['length']}, "
+#                                       f"{fixed_config['mean']['level']}, {config})/ {n}")
 #
 #     def plot_heatmap(data, title):
 #         x = np.arange(len(coordinate))
 #         y = np.arange(len(coordinate))
 #
 #         values = np.zeros((len(coordinate), len(coordinate)))
+#         levels_num = len(levels)
+#         lengths_num = len(lengths)
 #
-#         # 填充热图数据
-#         for i, train_config in enumerate(coordinate):
-#             train_parts = train_config.strip("()").split(", ")
-#             train_platform_level = float(train_parts[0].split("=")[1])
-#             train_platform_length = float(train_parts[1].split("=")[1])
-#             train_mean_level = float(train_parts[2].split("=")[1])
-#             train_mean_length = float(train_parts[3].split("=")[1])
+#         for i1, train_anomaly in enumerate(anomaly_types):
+#             for train_config_name in data[train_anomaly].keys():
+#                 for i2, train_config in enumerate(data[train_anomaly][train_config_name].keys()):
+#                     for j1, valid_anomaly in enumerate(anomaly_types):
+#                         for valid_config_name in data[train_anomaly][train_config_name][train_config][
+#                             valid_anomaly].keys():
+#                             for j2, valid_config in enumerate(data[train_anomaly][train_config_name][train_config][
+#                                                                   valid_anomaly][valid_config_name].keys()):
+#                                 i = i1 * (levels_num + lengths_num)
+#                                 j = j1 * (levels_num + lengths_num)
+#                                 if train_config_name == 'level':
+#                                     i += i2
+#                                 else:  # train_config_name == 'length'
+#                                     i += levels_num + i2
+#                                 if valid_config_name == 'level':
+#                                     j += j2
+#                                 else:  # valid_config_name == 'length'
+#                                     j += levels_num + j2
 #
-#             for j, valid_config in enumerate(coordinate):
-#                 valid_parts = valid_config.strip("()").split(", ")
-#                 valid_platform_level = float(valid_parts[0].split("=")[1])
-#                 valid_platform_length = float(valid_parts[1].split("=")[1])
-#                 valid_mean_level = float(valid_parts[2].split("=")[1])
-#                 valid_mean_length = float(valid_parts[3].split("=")[1])
+#                                 values[i, j] = data[train_anomaly][train_config_name][train_config][valid_anomaly][
+#                                     valid_config_name][valid_config]
 #
-#                 # 根据你的数据结构填充 values[i, j]
-#                 # 这里假设 data 是一个嵌套字典结构，你需要根据实际数据结构调整访问逻辑
-#                 try:
-#                     values[i, j] = data['platform']['level'][train_platform_level]['platform']['length'][
-#                         train_platform_length]['mean']['level'][train_mean_level]['mean']['length'][
-#                         train_mean_length]['platform']['level'][valid_platform_level]['platform']['length'][
-#                         valid_platform_length]['mean']['level'][valid_mean_level]['mean']['length'][valid_mean_length]
-#                 except KeyError:
-#                     values[i, j] = 0  # 如果找不到对应值，填充值为 0
-#
-#         # 绘制热图
 #         plt.figure(figsize=(20, 16))
 #         plt.pcolormesh(x, y, np.ma.masked_where(values == 0, values), cmap="viridis",
 #                        vmin=np.min(values), vmax=np.max(values))
@@ -320,24 +218,75 @@ def plot_wd_f1score_combined():
 #                 column = values[i, :]
 #                 max_index = np.argmax(column)
 #                 plt.scatter(i, max_index, color='red', s=50, edgecolor='black', label='Max Value')
-#
 #         plt.xticks(ticks=x, labels=coordinate, rotation=90)
 #         plt.yticks(ticks=y, labels=coordinate)
 #         plt.colorbar(label='Value')
-#         plt.xlabel('Train Configuration')
-#         plt.ylabel('Test Configuration')
+#         plt.xlabel(f'train')
+#         plt.ylabel(f'test')
 #         plt.title(title)
 #         handles, labels = plt.gca().get_legend_handles_labels()
 #         by_label = dict(zip(labels, handles))
 #         plt.legend(by_label.values(), by_label.keys(), loc='upper left')
-#         # plt.savefig(f'logs/training/{trail}/{title}.pdf')
+#         plt.savefig(f'logs/training/{trail}/{title}.pdf')
 #         plt.show()
+#
+#         # import plotly.express as px
+#         #
+#         # import pandas as pd
+#         # df = pd.DataFrame(values, index=coordinate, columns=coordinate)
+#         #
+#         # fig = px.imshow(df, text_auto=False, color_continuous_scale='Viridis')
+#         # fig.show()
 #
 #     plot_heatmap(data=wd, title=f'WD')
 #     plot_heatmap(data=f1score, title=f'F1-score')
 
+def plot_wd_f1score_combined():
+    with open(f"logs/training/{trail}/wd_f1score.txt", "r") as f:
+        lines = f.readlines()
+        wd = ast.literal_eval(lines[0][4:])
+        f1score = ast.literal_eval(lines[1][9:])
+
+    def plot_heatmap(data, title):
+        axis = list(data.keys())
+        num = np.arange(len(axis))
+        values = np.zeros((len(axis), len(axis)))
+        for i, x in enumerate(axis):
+            for j, y in enumerate(axis):
+                values[i, j] = data[x][y]
+        axis = [f"{str(key)}/ {i}" for i, key in enumerate(axis)]
+        plt.figure(figsize=(20, 16))
+        plt.pcolormesh(num, num, np.ma.masked_where(values == 0, values), cmap="viridis", vmin=np.min(values),
+                       vmax=np.max(values))
+        if title[-2:] == 'WD':
+            for i in range(values.shape[1]):
+                column = values[i, :]
+                min_index = np.argmin(column)
+                plt.scatter(i, min_index, color='red', s=50, edgecolor='black', label='Min Value')
+        else:
+            for i in range(values.shape[1]):
+                column = values[i,:]
+                max_index = np.argmax(column)
+                plt.scatter(i, max_index, color='red', s=50, edgecolor='black', label='Max Value')
+
+        plt.xticks(ticks=num)
+        plt.yticks(ticks=num, labels=axis)
+        plt.colorbar(label='Value')
+        plt.xlabel(f'train')
+        plt.ylabel(f'test')
+        plt.title(title)
+        handles, labels = plt.gca().get_legend_handles_labels()
+        by_label = dict(zip(labels, handles))
+        plt.legend(by_label.values(), by_label.keys(), loc='upper left')
+        plt.savefig(f'logs/training/{trail}/{title}.pdf')
+        plt.show()
+
+    plot_heatmap(data=wd, title=f'WD')
+    plot_heatmap(data=f1score, title=f'F1-Score')
+
+
 if __name__ == "__main__":
-    plot_loss_curve(last=False)
-    plot_loss_curve(last=True)
+    # plot_loss_curve(last=False)
+    # plot_loss_curve(last=True)
     # plot_wd_f1score()
-    # plot_wd_f1score_combined()
+    plot_wd_f1score_combined()

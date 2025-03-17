@@ -34,9 +34,7 @@ def train_model(args, m_config, train_dataloader, trainval_dataloader, a_config)
     early_stop_callback = EarlyStopping(
         monitor="val_loss",
         mode="min",
-        patience=1000 if args.trail == 'warmup' else (
-            100 if args.trail in ['more_epoch', 'second_loss', 'length_optimized', 'more_negative', 'second_anomaly',
-                                  'inject_spike'] else (20 if args.trail in ['fixed', 'grid'] else None))
+        patience=100
     )
     trainer = pl.Trainer(
         accelerator='auto',

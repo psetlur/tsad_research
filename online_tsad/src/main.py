@@ -37,13 +37,6 @@ if __name__ == "__main__":
     parser.add_argument("--ckpt_monitor", type=str, default='val_loss')
     parser.add_argument("--config_path", type=str, default='configs/default.yml')
     parser.add_argument("--strategy", type=str, default='auto')
-    # parser.add_argument("--trail", type=str, default='fixed')
-    # parser.add_argument("--trail", type=str, default='grid')
-    # parser.add_argument("--trail", type=str, default='more_epochs')
-    # parser.add_argument("--trail", type=str, default='second_loss')
-    # parser.add_argument("--trail", type=str, default='length_optimized')
-    # parser.add_argument("--trail", type=str, default='more_negative')
-    # parser.add_argument("--trail", type=str, default='warmup')
     # parser.add_argument("--trail", type=str, default='second_anomaly')
     parser.add_argument("--trail", type=str, default='inject_spike')
     # parser.add_argument("--device", type=str, default='cpu')
@@ -106,14 +99,14 @@ if __name__ == "__main__":
     # print(colored("Ground truth point:", 'blue'), best_point)
     # print(colored(f"Iteration {iteration + 1} - Target Value:", 'blue'), target)
     # print(colored(f"Iteration {iteration + 1} - F1-Score   :", 'blue'), f1score)
-    print(colored(f"WD:", 'blue'), wd)
-    print(colored(f"F1-Score:", 'blue'), f1score)
-    print()
-    if len(wd) != 0 or len(f1score) != 0:
-        with open(f'logs/training/{args.trail}/wd_f1score.txt', 'w') as file:
-            file.write('wd: ' + str(wd))
-            file.write("\n")
-            file.write('f1score: ' + str(f1score))
+    # print(colored(f"WD:", 'blue'), wd)
+    # print(colored(f"F1-Score:", 'blue'), f1score)
+    # print()
+    # if len(wd) != 0 or len(f1score) != 0:
+    #     with open(f'logs/training/{args.trail}/wd_f1score.txt', 'w') as file:
+    #         file.write('wd: ' + str(wd))
+    #         file.write("\n")
+    #         file.write('f1score: ' + str(f1score))
 
     # acquisition_function = UpperConfidenceBound(kappa=0.1)
     # optimizer = BayesianOptimization(
