@@ -79,7 +79,8 @@ if __name__ == "__main__":
             next_point = {k: np.round(v, 3) for k, v in optimizer.suggest().items()}
         loss, f1 = black_box_function(args, model, train_dataloader, val_dataloader, test_dataloader, valid_point,
                                       next_point)
-        print(f'iter: {iter}, next_point: {next_point}, valid_point: {valid_point}, wd: {loss}, f1-score: {f1}')
+        print(f'iter: {iter}, next_point.level.length: {next_point["level"]}.{next_point["length"]}, '
+              f'valid_point: {valid_point}, wd: {loss}, f1-score: {f1}')
         wd.append(loss)
         f1score.append(f1)
         optimizer.register(params=next_point, target=-loss)
