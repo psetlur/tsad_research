@@ -64,28 +64,33 @@ if __name__ == "__main__":
 
     model = train_model(args, m_config, train_dataloader, trainval_dataloader)
 
-    # wd, f1score = black_box_function(args, model, train_dataloader, val_dataloader, test_dataloader, valid_point)
+    # wd, f1score, points = black_box_function(args, model, train_dataloader, val_dataloader, test_dataloader,
+    # valid_point)
 
     pbounds = {"level": (-1.0, 1.0), "length": (0.2, 0.5)}
     acquisition_function = UpperConfidenceBound(kappa=0.1)
     optimizer = BayesianOptimization(f=black_box_function, acquisition_function=acquisition_function,
                                      pbounds=pbounds, allow_duplicate_points=True, random_state=0)
-    number_of_random_search = 5
-    wd, f1score = list(), list()
-    for iter in range(50):
+    number_of_random_search = 10
+    wd, f1score, points = list(), list(), list()
+    best = {'level': -1.0, 'length': 0.2, 'wd': np.inf, 'f1-score': 0}
+    for iter in range(100):
         if iter < number_of_random_search:
-            next_point = {k: np.round(np.random.uniform(v[0], v[1]), 3) for k, v in pbounds.items()}
+            next_point = {k: np.random.uniform(v[0], v[1]) for k, v in pbounds.items()}
         else:
-            next_point = {k: np.round(v, 3) for k, v in optimizer.suggest().items()}
+            next_point = {k: v for k, v in optimizer.suggest().items()}
         loss, f1 = black_box_function(args, model, train_dataloader, val_dataloader, test_dataloader, valid_point,
                                       next_point)
         print(f'iter: {iter}, next_point.level.length: {next_point["level"]}.{next_point["length"]}, '
               f'valid_point: {valid_point}, wd: {loss}, f1-score: {f1}')
         wd.append(loss)
         f1score.append(f1)
+        points.append(next_point)
+        if loss < best['wd']:
+            best = {'level': next_point["level"], 'length': next_point["length"], 'wd': loss, 'f1-score': f1}
         optimizer.register(params=next_point, target=-loss)
 
-    if len(wd) != 0 or len(f1score) != 0:
+    if len(wd) != 0 or len(f1score) != 0 or len(points) != 0:
         # with open(f'logs/training/{args.trail}/wd_f1score.txt', 'w') as file:
         # with open(f'logs/training/{args.trail}/sgd_wd_f1score_{valid_point["level"]}_{valid_point["length"]}.txt',
         #           'w') as file:
@@ -94,3 +99,5 @@ if __name__ == "__main__":
             file.write('wd: ' + str(wd))
             file.write("\n")
             file.write('f1score: ' + str(f1score))
+            file.write('points: ' + str(points))
+            file.write('best: ' + str(best))

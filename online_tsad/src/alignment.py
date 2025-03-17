@@ -148,17 +148,19 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
                                                   z_valid[valid_inlier_index].clone().squeeze(), z_valid_aug)
 
     if train_point == None:
-        train_level = torch.tensor(1.0, requires_grad=True, device=args.device)
-        train_length = torch.tensor(1.0, requires_grad=True, device=args.device)
+        train_level = torch.tensor(0.0, requires_grad=True, device=args.device)
+        train_length = torch.tensor(0.0, requires_grad=True, device=args.device)
         optimizer = optim.Adam([train_level, train_length], lr=0.1)
 
-        total_loss, f1score = list(), list()
+        total_loss, f1score, points = list(), list(), list()
+        best = {'level': -1.0, 'length': 0.2, 'wd': np.inf, 'f1-score': 0}
         for _ in range(100):
+            train_level = torch.sigmoid(train_level)
+            train_length = 0.2 + 0.3 * torch.sigmoid(train_length)
             x_train_aug, train_labels = list(), list()
             for i in train_outlier_index:
-                x_aug, l = inject_platform_sgd(torch.tensor(x_train_np[i]).to(args.device),
-                                               torch.sigmoid(train_level), np.random.uniform(0, 0.5),
-                                               0.2 + 0.3 * torch.sigmoid(train_length))
+                x_aug, l = inject_platform_sgd(torch.tensor(x_train_np[i]).to(args.device), train_level,
+                                               np.random.uniform(0, 0.5), train_length)
                 x_train_aug.append(x_aug)
                 train_labels.append(l)
             z_train_aug = model(torch.stack(x_train_aug, dim=0).float().unsqueeze(1).to(args.device))
@@ -176,13 +178,15 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
             classify_model = train_classify_model(args=args, X_train=X, y_train=y)
             y_pred = classify(model=classify_model, X_valid=z_valid_aug_t.detach())
             f1 = f1_score(np.array(valid_labels, dtype=np.int64).reshape(-1), y_pred.reshape(-1))
-            print(f'train.level.length: {torch.sigmoid(train_level).item()}.'
-                  f'{0.2 + 0.3 * torch.sigmoid(train_length).item()}, '
-                  f'valid.level.length: {valid_level}.{valid_length}, '
-                  f'wd: {loss.item()}, f1-score: {f1}')
+            print(f'train.level.length: {train_level.item()}.{train_length.item()}, '
+                  f'valid.level.length: {valid_level}.{valid_length}, wd: {loss.item()}, f1-score: {f1}')
             total_loss.append(loss.item())
             f1score.append(f1)
-            return total_loss, f1score
+            points.append({'level': torch.sigmoid(train_level).item(),
+                           'length': 0.2 + 0.3 * torch.sigmoid(train_length).item()})
+            if loss < best['wd']:
+                best = {'level': train_level.item(), 'length': train_length.item(), 'wd': loss, 'f1-score': f1}
+            return total_loss, f1score, points, best
     else:
         train_level = train_point['level']
         train_length = train_point['length']
