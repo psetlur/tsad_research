@@ -6,9 +6,9 @@ from pytorch_lightning.callbacks import EarlyStopping
 from models.encoder import Encoder
 
 
-def train_model(args, m_config, train_dataloader, trainval_dataloader, a_config):
+def train_model(args, m_config, train_dataloader, trainval_dataloader):
     path = "checkpoints/training/"
-    model = Encoder(args=args, ts_input_size=m_config.get("ts_input_size"), lr=m_config.get("lr"), a_config=a_config)
+    model = Encoder(args=args, ts_input_size=m_config.get("ts_input_size"), lr=m_config.get("lr"))
     if os.path.exists(path):
         ckpt = os.listdir(path)
         if len(ckpt) > 0:

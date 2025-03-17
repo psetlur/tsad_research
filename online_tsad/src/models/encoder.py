@@ -57,11 +57,10 @@ def config_from_grid(cdf, grid):
 
 
 class Encoder(pl.LightningModule):
-    def __init__(self, args, ts_input_size, lr, a_config):
+    def __init__(self, args, ts_input_size, lr):
         super().__init__()
         self.args = args
         self.save_hyperparameters()
-        self.a_config = a_config
 
         self.encoder = CNNEncoder(ts_input_size)
         self.lr = lr
@@ -92,11 +91,13 @@ class Encoder(pl.LightningModule):
         start = int(len(ts_row) * start)
         length = int(len(ts_row) * length)
         ts_row[start: start + length] += float(level)
+        ts_row = ((ts_row - ts_row.min()) / (ts_row.max() - ts_row.min())) * 2 - 1
         return ts_row
 
     def inject_spike(self, ts_row, level, start):
         start_idx = int(len(ts_row) * start)
         ts_row[start_idx] += float(level)
+        ts_row = ((ts_row - ts_row.min()) / (ts_row.max() - ts_row.min())) * 2 - 1
         return ts_row
 
     def inject(self, anomaly_type, ts, config):
