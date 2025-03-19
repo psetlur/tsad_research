@@ -283,10 +283,52 @@ def plot_wd_f1score_combined():
 
     plot_heatmap(data=wd, title=f'WD')
     plot_heatmap(data=f1score, title=f'F1-Score')
+    
+    
+def plot_wd_f1score_line(input_filepath, output_filepath, type = "wd", anomaly = "platform", level = 0.5, length = 0.3):
+    df = pd.read_csv(input_filepath)
+    plt.figure(figsize = (12, 10))
+
+    plt.plot(df['iter'], df[type], marker = 'o', linestyle = '-', color = 'blue', linewidth=2)
+
+    if type == "wd":
+        min_wd = df['wd'].min()
+        min_wd_idx = df['wd'].idxmin()
+        min_wd_iter = df.loc[min_wd_idx, 'iter']
+
+        plt.scatter(min_wd_iter, min_wd, color='red', s=500, marker='*', zorder=5)
+    elif type == "f1":
+        max_f1 = df["f1"].max()
+        max_f1_idx = df["f1"].idxmax()
+        max_f1_iter = df.loc[max_f1_idx, 'iter']
+
+        plt.scatter(max_f1_iter, max_f1, color='red', s=500, marker='*', zorder=5)
+
+    plt.xlabel("Iteration")
+    plt.ylabel(type)
+    plt.title(f"Iteration vs {type} for {anomaly} anomaly ({level}, {length})")
+    plt.tight_layout()
+    plt.savefig(output_filepath)
+    plt.show()
+
 
 
 if __name__ == "__main__":
     # plot_loss_curve(last=False)
     # plot_loss_curve(last=True)
     # plot_wd_f1score()
-    plot_wd_f1score_combined()
+    # plot_wd_f1score_combined()
+    anomaly = "spike"
+    type = "f1"
+    level = 0.5
+    length = 0.3
+    if anomaly == "spike":
+        plot_wd_f1score_line(
+            input_filepath = f"logs/training/inject_spike/bayes_{anomaly}_{level}_logs.csv",
+            output_filepath = f"logs/training/inject_spike/bayes_{anomaly}_{level}_{type}.png",
+            type = type)
+    else:
+        plot_wd_f1score_line(
+            input_filepath = f"logs/training/inject_spike/bayes_{anomaly}_{level}_{length}_logs.csv",
+            output_filepath = f"logs/training/inject_spike/bayes_{anomaly}_{level}_{length}_{type}.png",
+            type = type)

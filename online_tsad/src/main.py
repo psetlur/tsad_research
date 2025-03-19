@@ -60,7 +60,7 @@ if __name__ == "__main__":
     train_dataloader, trainval_dataloader, val_dataloader, test_dataloader = get_dataloaders(
         [X_train], [X_val], [X_test, y_test], batch_size=m_config["batch_size"])
 
-    valid_point = {"level": 0.5, "length": 0.3}
+    valid_point = {"level": -0.5, "length": 0.5}
 
     model = train_model(args, m_config, train_dataloader, trainval_dataloader)
 
@@ -94,7 +94,9 @@ if __name__ == "__main__":
         # with open(f'logs/training/{args.trail}/wd_f1score.txt', 'w') as file:
         # with open(f'logs/training/{args.trail}/sgd_wd_f1score_{valid_point["level"]}_{valid_point["length"]}.txt',
         #           'w') as file:
-        with open(f'logs/training/{args.trail}/bayes_wd_f1score_{valid_point["level"]}_{valid_point["length"]}.txt',
+        log_dir = f'logs/training/hpo_one'
+        os.makedirs(log_dir, exist_ok=True)
+        with open(f'{log_dir}/bayes_wd_f1score_platform_{valid_point["level"]}_{valid_point["length"]}.txt',
                   'w') as file:
             file.write('wd: ' + str(wd))
             file.write("\n")
