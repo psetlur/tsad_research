@@ -75,7 +75,7 @@ if __name__ == "__main__":
     wd, f1score, points = list(), list(), list()
     best_point = {'platform_level': -1.0, 'platform_length': 0.2, 'mean_level': -1.0, 'mean_length': 0.2}
     best_score = {'wd': np.inf, 'f1-score': 0}
-    for iter in range(50):
+    for iter in range(100):
         if iter < number_of_random_search:
             next_point = {k: np.round(np.random.uniform(v[0], v[1]), 4) for k, v in pbounds.items()}
         else:

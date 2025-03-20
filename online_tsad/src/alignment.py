@@ -1,7 +1,6 @@
 import logging
 import math
 import os
-
 from geomloss import SamplesLoss
 import numpy as np
 import torch
@@ -226,12 +225,13 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
                                           train_p[anomaly_type]['length']])
             x_train_aug.append(x_aug)
             train_labels.append(l)
-    z_train_aug = model(torch.tensor(np.array(x_train_aug)).float().unsqueeze(1).to(args.device))
+    z_train_aug = model(torch.tensor(np.array(x_train_aug)).float().unsqueeze(1).to(args.device)).detach()
     z_train_aug_t = emb.normalize(emb=z_train_aug)
 
     if best is False:
         W_loss = SamplesLoss("sinkhorn", p=2, blur=0.05, scaling=0.9)
-        loss = W_loss(torch.cat([z_train_t, z_train_aug_t], dim=0), torch.cat([z_valid_t, z_valid_aug_t], dim=0))
+        # loss = W_loss(torch.cat([z_train_t, z_train_aug_t], dim=0), torch.cat([z_valid_t, z_valid_aug_t], dim=0))
+        loss = W_loss(z_train_aug_t, z_valid_aug_t)
 
         X = torch.cat([z_train_t, z_train_aug_t.detach()], dim=0)
         y = torch.tensor(np.concatenate([np.zeros((len(train_inlier_index), x_train_np.shape[1])),
