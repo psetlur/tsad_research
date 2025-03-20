@@ -1,4 +1,11 @@
 import os
+
+os.environ["OPENBLAS_NUM_THREADS"] = "32"  # Set to 25% of your 128 cores
+os.environ["OMP_NUM_THREADS"] = "32"
+os.environ["MKL_NUM_THREADS"] = "32" 
+os.environ["VECLIB_MAXIMUM_THREADS"] = "32"
+os.environ["NUMEXPR_NUM_THREADS"] = "32"
+
 import yaml
 import argparse
 import pandas as pd
@@ -62,9 +69,10 @@ if __name__ == "__main__":
     # valid_point)
 
     valid_point = {'platform': {"level": 0.5, "length": 0.3}, 'mean': {"level": 0.5, "length": 0.3}}
+    # valid_point = {'mean': {"level": 0.5, "length": 0.3}}
     valid_anomaly_types = ['platform', 'mean']
     # valid_point = {'platform': {"level": 0.5, "length": 0.3}}
-    # valid_anomaly_types = ['platform']
+    # valid_anomaly_types = ['mean']
 
     pbounds = {'platform_level': (-1.0, 1.0), 'platform_length': (0.2, 0.5), 'mean_level': (-1.0, 1.0),
                'mean_length': (0.2, 0.5)}
@@ -75,7 +83,7 @@ if __name__ == "__main__":
     wd, f1score, points = list(), list(), list()
     best_point = {'platform_level': -1.0, 'platform_length': 0.2, 'mean_level': -1.0, 'mean_length': 0.2}
     best_score = {'wd': np.inf, 'f1-score': 0}
-    for iter in range(50):
+    for iter in range(100):
         if iter < number_of_random_search:
             next_point = {k: np.round(np.random.uniform(v[0], v[1]), 4) for k, v in pbounds.items()}
         else:
@@ -97,9 +105,9 @@ if __name__ == "__main__":
                        valid_anomaly_types, best_point, True)
 
     if len(wd) != 0 or len(f1score) != 0 or len(points) != 0:
-        log_dir = f'logs/training/hpo'
+        log_dir = f'logs/training/hpo_both'
         os.makedirs(log_dir, exist_ok=True)
-        with open(f'{log_dir}/bayes_wd_f1score.txt', 'w') as file:
+        with open(f'{log_dir}/bayes_wd_f1score_both_0.5_0.3.txt', 'w') as file:
             file.write('wd: ' + str(wd))
             file.write("\n")
             file.write('f1score: ' + str(f1score))
