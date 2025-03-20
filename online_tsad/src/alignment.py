@@ -34,19 +34,19 @@ class EmbNormalizer:
         return (emb - self.emb_mean) / self.emb_std
 
 
-def inject_platform_sgd(ts_row, level, start, length):
-    len_ts = len(ts_row)
-    start_idx = start * len_ts
-    end_idx = start_idx + length * len_ts
-    indices = torch.arange(len_ts, device=ts_row.device)
-    temperature = 0.1
-    mask_left = torch.sigmoid((indices - start_idx) / temperature)
-    mask_right = torch.sigmoid((end_idx - indices) / temperature)
-    mask = mask_left * mask_right
-    x_aug = ts_row * (1 - mask) + level * mask
-    label = mask.detach().cpu().numpy()
-    return x_aug, label
-
+# def inject_platform_sgd(ts_row, level, start, length):
+#     len_ts = len(ts_row)
+#     start_idx = start * len_ts
+#     end_idx = start_idx + length * len_ts
+#     indices = torch.arange(len_ts, device=ts_row.device)
+#     temperature = 0.1
+#     mask_left = torch.sigmoid((indices - start_idx) / temperature)
+#     mask_right = torch.sigmoid((end_idx - indices) / temperature)
+#     mask = mask_left * mask_right
+#     x_aug = ts_row * (1 - mask) + level * mask
+#     label = mask.detach().cpu().numpy()
+#     return x_aug, label
+#
 
 def inject_platform(ts_row, level, start, length):
     ts_row = np.array(ts_row)
@@ -108,11 +108,10 @@ def classify(model, X_valid):
     return y_pred
 
 
-def black_box_function(args, model, train_dataloader, val_dataloader, test_dataloader, valid_point, train_point=None):
+def black_box_function(args, model, train_dataloader, val_dataloader, test_dataloader, valid_point, valid_anomaly_types,
+                       train_point):
     ratio_anomaly = 0.1
-    valid_level = valid_point['level']
-    valid_length = torch.tensor(valid_point['length'], device=args.device)
-    anomaly_type = 'platform'
+    anomaly_types = ['platform', 'mean', 'spike']
 
     with torch.no_grad():
         z_train, x_train_np = [], []
@@ -137,76 +136,95 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
                                                                    train_size=1 - ratio_anomaly, random_state=0)
         x_valid_aug, valid_labels = list(), list()
         for i in valid_outlier_index:
-            x_aug, l = inject(anomaly_type=anomaly_type, ts=x_valid_np[i],
-                              config=[valid_level, np.random.uniform(0, 0.5), valid_length])
-            x_valid_aug.append(x_aug)
-            valid_labels.append(l)
+            for anomaly_type in anomaly_types:
+                if anomaly_type not in valid_anomaly_types:
+                    x_valid_aug.append(x_valid_np[i])
+                    valid_labels.append(np.zeros(len(x_valid_np[i])))
+                else:
+                    if anomaly_type == 'spike':
+                        x_aug, l = inject(anomaly_type=anomaly_type, ts=x_valid_np[i],
+                                          config=[valid_point[anomaly_type]['level'], np.random.uniform(0, 0.5)])
+                    else:
+                        x_aug, l = inject(anomaly_type=anomaly_type, ts=x_valid_np[i],
+                                          config=[valid_point[anomaly_type]['level'], np.random.uniform(0, 0.5),
+                                                  valid_point[anomaly_type]['length']])
+                    x_valid_aug.append(x_aug)
+                    valid_labels.append(l)
 
         emb = EmbNormalizer()
         z_valid_aug = model(torch.tensor(np.array(x_valid_aug)).float().unsqueeze(1).to(args.device)).detach()
         z_train_t, z_valid_t, z_valid_aug_t = emb(z_train[train_inlier_index].clone().squeeze(),
                                                   z_valid[valid_inlier_index].clone().squeeze(), z_valid_aug)
 
-    if train_point == None:
-        train_level = torch.tensor(0.0, requires_grad=True, device=args.device)
-        train_length = torch.tensor(0.0, requires_grad=True, device=args.device)
-        optimizer = optim.Adam([train_level, train_length], lr=0.1)
-
-        total_loss, f1score, points = list(), list(), list()
-        best = {'level': -1.0, 'length': 0.2, 'wd': np.inf, 'f1-score': 0}
-        for _ in range(100):
-            train_level = torch.sigmoid(train_level)
-            train_length = 0.2 + 0.3 * torch.sigmoid(train_length)
-            x_train_aug, train_labels = list(), list()
-            for i in train_outlier_index:
-                x_aug, l = inject_platform_sgd(torch.tensor(x_train_np[i]).to(args.device), train_level,
-                                               np.random.uniform(0, 0.5), train_length)
-                x_train_aug.append(x_aug)
-                train_labels.append(l)
-            z_train_aug = model(torch.stack(x_train_aug, dim=0).float().unsqueeze(1).to(args.device))
-            z_train_aug_t = emb.normalize(emb=z_train_aug)
-
-            W_loss = SamplesLoss("sinkhorn", p=2, blur=0.05, scaling=0.9)
-            loss = W_loss(torch.cat([z_train_t, z_train_aug_t], dim=0), torch.cat([z_valid_t, z_valid_aug_t], dim=0))
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-
-            X = torch.cat([z_train_t, z_train_aug_t.detach()], dim=0)
-            y = torch.tensor(np.concatenate([np.zeros((len(train_inlier_index), x_train_np.shape[1])),
-                                             train_labels], axis=0)).to(args.device)
-            classify_model = train_classify_model(args=args, X_train=X, y_train=y)
-            y_pred = classify(model=classify_model, X_valid=z_valid_aug_t.detach())
-            f1 = f1_score(np.array(valid_labels, dtype=np.int64).reshape(-1), y_pred.reshape(-1))
-            print(f'train.level.length: {train_level.item()}.{train_length.item()}, '
-                  f'valid.level.length: {valid_level}.{valid_length}, wd: {loss.item()}, f1-score: {f1}')
-            total_loss.append(loss.item())
-            f1score.append(f1)
-            points.append({'level': torch.sigmoid(train_level).item(),
-                           'length': 0.2 + 0.3 * torch.sigmoid(train_length).item()})
-            if loss < best['wd']:
-                best = {'level': train_level.item(), 'length': train_length.item(), 'wd': loss, 'f1-score': f1}
-            return total_loss, f1score, points, best
-    else:
-        train_level = train_point['level']
-        train_length = train_point['length']
-
-        x_train_aug, train_labels = list(), list()
-        for i in train_outlier_index:
-            x_aug, l = inject(anomaly_type=anomaly_type, ts=x_train_np[i],
-                              config=[train_level, np.random.uniform(0, 0.5), train_length])
+    # if train_point == None:
+    #     train_level = torch.tensor(0.0, requires_grad=True, device=args.device)
+    #     train_length = torch.tensor(0.0, requires_grad=True, device=args.device)
+    #     optimizer = optim.Adam([train_level, train_length], lr=0.1)
+    #
+    #     total_loss, f1score, points = list(), list(), list()
+    #     best = {'level': -1.0, 'length': 0.2, 'wd': np.inf, 'f1-score': 0}
+    #     for _ in range(100):
+    #         train_level = torch.sigmoid(train_level)
+    #         train_length = 0.2 + 0.3 * torch.sigmoid(train_length)
+    #         x_train_aug, train_labels = list(), list()
+    #         for i in train_outlier_index:
+    #             x_aug, l = inject_platform_sgd(torch.tensor(x_train_np[i]).to(args.device), train_level,
+    #                                            np.random.uniform(0, 0.5), train_length)
+    #             x_train_aug.append(x_aug)
+    #             train_labels.append(l)
+    #         z_train_aug = model(torch.stack(x_train_aug, dim=0).float().unsqueeze(1).to(args.device))
+    #         z_train_aug_t = emb.normalize(emb=z_train_aug)
+    #
+    #         W_loss = SamplesLoss("sinkhorn", p=2, blur=0.05, scaling=0.9)
+    #         loss = W_loss(torch.cat([z_train_t, z_train_aug_t], dim=0), torch.cat([z_valid_t, z_valid_aug_t], dim=0))
+    #         optimizer.zero_grad()
+    #         loss.backward()
+    #         optimizer.step()
+    #
+    #         X = torch.cat([z_train_t, z_train_aug_t.detach()], dim=0)
+    #         y = torch.tensor(np.concatenate([np.zeros((len(train_inlier_index), x_train_np.shape[1])),
+    #                                          train_labels], axis=0)).to(args.device)
+    #         classify_model = train_classify_model(args=args, X_train=X, y_train=y)
+    #         y_pred = classify(model=classify_model, X_valid=z_valid_aug_t.detach())
+    #         f1 = f1_score(np.array(valid_labels, dtype=np.int64).reshape(-1), y_pred.reshape(-1))
+    #         print(f'train.level.length: {train_level.item()}.{train_length.item()}, '
+    #               f'valid.level.length: {valid_level}.{valid_length}, wd: {loss.item()}, f1-score: {f1}')
+    #         total_loss.append(loss.item())
+    #         f1score.append(f1)
+    #         points.append({'level': torch.sigmoid(train_level).item(),
+    #                        'length': 0.2 + 0.3 * torch.sigmoid(train_length).item()})
+    #         if loss < best['wd']:
+    #             best = {'level': train_level.item(), 'length': train_length.item(), 'wd': loss, 'f1-score': f1}
+    #         return total_loss, f1score, points, best
+    # else:
+    train_p = dict()
+    for k, v in train_point.items():
+        s = k.split('_')
+        if train_p.get(s[0]) is None:
+            train_p[s[0]] = dict()
+        train_p[s[0]][s[1]] = v
+    x_train_aug, train_labels = list(), list()
+    for i in train_outlier_index:
+        for anomaly_type in anomaly_types:
+            if anomaly_type == 'spike':
+                x_aug, l = inject(anomaly_type=anomaly_type, ts=x_train_np[i],
+                                  config=[train_p[anomaly_type]['level'], np.random.uniform(0, 0.5)])
+            else:
+                x_aug, l = inject(anomaly_type=anomaly_type, ts=x_train_np[i],
+                                  config=[train_p[anomaly_type]['level'], np.random.uniform(0, 0.5),
+                                          train_p[anomaly_type]['length']])
             x_train_aug.append(x_aug)
             train_labels.append(l)
-        z_train_aug = model(torch.tensor(np.array(x_train_aug)).float().unsqueeze(1).to(args.device))
-        z_train_aug_t = emb.normalize(emb=z_train_aug)
+    z_train_aug = model(torch.tensor(np.array(x_train_aug)).float().unsqueeze(1).to(args.device))
+    z_train_aug_t = emb.normalize(emb=z_train_aug)
 
-        W_loss = SamplesLoss("sinkhorn", p=2, blur=0.05, scaling=0.9)
-        loss = W_loss(torch.cat([z_train_t, z_train_aug_t], dim=0), torch.cat([z_valid_t, z_valid_aug_t], dim=0))
+    W_loss = SamplesLoss("sinkhorn", p=2, blur=0.05, scaling=0.9)
+    loss = W_loss(torch.cat([z_train_t, z_train_aug_t], dim=0), torch.cat([z_valid_t, z_valid_aug_t], dim=0))
 
-        X = torch.cat([z_train_t, z_train_aug_t.detach()], dim=0)
-        y = torch.tensor(np.concatenate([np.zeros((len(train_inlier_index), x_train_np.shape[1])),
-                                         train_labels], axis=0)).to(args.device)
-        classify_model = train_classify_model(args=args, X_train=X, y_train=y)
-        y_pred = classify(model=classify_model, X_valid=z_valid_aug_t.detach())
-        f1score = f1_score(torch.tensor(np.array(valid_labels)).reshape(-1), y_pred.reshape(-1))
-        return loss.item(), f1score
+    X = torch.cat([z_train_t, z_train_aug_t.detach()], dim=0)
+    y = torch.tensor(np.concatenate([np.zeros((len(train_inlier_index), x_train_np.shape[1])),
+                                     train_labels], axis=0)).to(args.device)
+    classify_model = train_classify_model(args=args, X_train=X, y_train=y)
+    y_pred = classify(model=classify_model, X_valid=z_valid_aug_t.detach())
+    f1score = f1_score(torch.tensor(np.array(valid_labels)).reshape(-1), y_pred.reshape(-1))
+    return loss.item(), f1score

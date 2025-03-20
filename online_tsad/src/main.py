@@ -60,46 +60,61 @@ if __name__ == "__main__":
     train_dataloader, trainval_dataloader, val_dataloader, test_dataloader = get_dataloaders(
         [X_train], [X_val], [X_test, y_test], batch_size=m_config["batch_size"])
 
-    valid_point = {"level": -0.5, "length": 0.5}
-
     model = train_model(args, m_config, train_dataloader, trainval_dataloader)
 
     # wd, f1score, points = black_box_function(args, model, train_dataloader, val_dataloader, test_dataloader,
     # valid_point)
 
-    pbounds = {"level": (-1.0, 1.0), "length": (0.2, 0.5)}
+    # valid_point = {'platform': {"level": -0.5, "length": 0.5}, 'mean': {"level": -0.5, "length": 0.5},
+    #                'spike': {"level": -0.5}}
+    # valid_anomaly_types = ['platform', 'mean', 'spike']
+    # valid_point = {'mean': {"level": -0.5, "length": 0.5}, 'spike': {"level": -0.5}}
+    # valid_anomaly_types = ['mean', 'spike']
+    valid_point = {'platform': {"level": -0.5, "length": 0.5}, 'spike': {"level": -0.5}}
+    valid_anomaly_types = ['platform', 'spike']
+    # valid_point = {'platform': {"level": -0.5, "length": 0.5}, 'mean': {"level": -0.5, "length": 0.5}}
+    # valid_anomaly_types = ['platform', 'mean']
+    pbounds = {'platform_level': (-1.0, 1.0), 'platform_length': (0.2, 0.5), 'mean_level': (-1.0, 1.0),
+               'mean_length': (0.2, 0.5), 'spike_level': (-1.0, 1.0)}
     acquisition_function = UpperConfidenceBound(kappa=0.1)
     optimizer = BayesianOptimization(f=black_box_function, acquisition_function=acquisition_function,
                                      pbounds=pbounds, allow_duplicate_points=True, random_state=0)
     number_of_random_search = 10
     wd, f1score, points = list(), list(), list()
-    best = {'level': -1.0, 'length': 0.2, 'wd': np.inf, 'f1-score': 0}
+    best_point = {'platform_level': -1.0, 'platform_length': 0.2, 'mean_level': -1.0, 'mean_length': 0.2,
+                  'spike_level': -1.0}
+    best_score = {'wd': np.inf, 'f1-score': 0}
     for iter in range(100):
         if iter < number_of_random_search:
-            next_point = {k: np.random.uniform(v[0], v[1]) for k, v in pbounds.items()}
+            next_point = {k: np.round(np.random.uniform(v[0], v[1]), 4) for k, v in pbounds.items()}
         else:
-            next_point = {k: v for k, v in optimizer.suggest().items()}
+            next_point = {k: np.round(v, 4) for k, v in optimizer.suggest().items()}
         loss, f1 = black_box_function(args, model, train_dataloader, val_dataloader, test_dataloader, valid_point,
-                                      next_point)
-        print(f'iter: {iter}, next_point.level.length: {next_point["level"]}.{next_point["length"]}, '
-              f'valid_point: {valid_point}, wd: {loss}, f1-score: {f1}')
+                                      valid_anomaly_types, next_point)
+        print(f'iter: {iter}, wd: {loss}, f1-score: {f1}, \n'
+              f'next_point: {next_point}, \n'
+              f'valid_point: {valid_point}')
         wd.append(loss)
         f1score.append(f1)
         points.append(next_point)
-        if loss < best['wd']:
-            best = {'level': next_point["level"], 'length': next_point["length"], 'wd': loss, 'f1-score': f1}
+        if loss < best_score['wd']:
+            best_point = next_point
+            best_score = {'wd': loss, 'f1score': f1}
         optimizer.register(params=next_point, target=-loss)
 
     if len(wd) != 0 or len(f1score) != 0 or len(points) != 0:
         # with open(f'logs/training/{args.trail}/wd_f1score.txt', 'w') as file:
         # with open(f'logs/training/{args.trail}/sgd_wd_f1score_{valid_point["level"]}_{valid_point["length"]}.txt',
         #           'w') as file:
-        log_dir = f'logs/training/hpo_one'
+        log_dir = f'logs/training/hpo'
         os.makedirs(log_dir, exist_ok=True)
-        with open(f'{log_dir}/bayes_wd_f1score_platform_{valid_point["level"]}_{valid_point["length"]}.txt',
-                  'w') as file:
+        with open(f'{log_dir}/bayes_wd_f1score.txt', 'w') as file:
             file.write('wd: ' + str(wd))
             file.write("\n")
             file.write('f1score: ' + str(f1score))
+            file.write("\n")
             file.write('points: ' + str(points))
-            file.write('best: ' + str(best))
+            file.write("\n")
+            file.write('best_point: ' + str(best_point))
+            file.write("\n")
+            file.write('best_score: ' + str(best_score))
