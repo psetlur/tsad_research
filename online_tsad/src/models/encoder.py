@@ -75,7 +75,8 @@ class Encoder(pl.LightningModule):
         elif self.args.trail == 'inject_spike':
             self.anomaly_types = ['platform', 'mean', 'spike']
         else:
-            raise Exception('Unsupported trail.')
+            self.anomaly_types = ['platform']
+            # raise Exception('Unsupported trail.')
 
     def forward(self, x):
         x = self.encoder(x)

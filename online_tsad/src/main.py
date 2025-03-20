@@ -2,14 +2,10 @@ import os
 import yaml
 import argparse
 import pandas as pd
-from termcolor import colored
-
 import torch
 import pytorch_lightning as pl
-
 from bayes_opt import BayesianOptimization
-from bayes_opt.acquisition import ExpectedImprovement, UpperConfidenceBound
-
+from bayes_opt.acquisition import UpperConfidenceBound
 from train_model import train_model
 from alignment import black_box_function
 from data.custom_dataloader import get_dataloaders
@@ -65,26 +61,21 @@ if __name__ == "__main__":
     # wd, f1score, points = black_box_function(args, model, train_dataloader, val_dataloader, test_dataloader,
     # valid_point)
 
-    # valid_point = {'platform': {"level": -0.5, "length": 0.5}, 'mean': {"level": -0.5, "length": 0.5},
-    #                'spike': {"level": -0.5}}
-    # valid_anomaly_types = ['platform', 'mean', 'spike']
-    # valid_point = {'mean': {"level": -0.5, "length": 0.5}, 'spike': {"level": -0.5}}
-    # valid_anomaly_types = ['mean', 'spike']
-    valid_point = {'platform': {"level": -0.5, "length": 0.5}, 'spike': {"level": -0.5}}
-    valid_anomaly_types = ['platform', 'spike']
-    # valid_point = {'platform': {"level": -0.5, "length": 0.5}, 'mean': {"level": -0.5, "length": 0.5}}
-    # valid_anomaly_types = ['platform', 'mean']
+    valid_point = {'platform': {"level": 0.5, "length": 0.3}, 'mean': {"level": 0.5, "length": 0.3}}
+    valid_anomaly_types = ['platform', 'mean']
+    # valid_point = {'platform': {"level": 0.5, "length": 0.3}}
+    # valid_anomaly_types = ['platform']
+
     pbounds = {'platform_level': (-1.0, 1.0), 'platform_length': (0.2, 0.5), 'mean_level': (-1.0, 1.0),
-               'mean_length': (0.2, 0.5), 'spike_level': (-1.0, 1.0)}
+               'mean_length': (0.2, 0.5)}
     acquisition_function = UpperConfidenceBound(kappa=0.1)
     optimizer = BayesianOptimization(f=black_box_function, acquisition_function=acquisition_function,
                                      pbounds=pbounds, allow_duplicate_points=True, random_state=0)
     number_of_random_search = 10
     wd, f1score, points = list(), list(), list()
-    best_point = {'platform_level': -1.0, 'platform_length': 0.2, 'mean_level': -1.0, 'mean_length': 0.2,
-                  'spike_level': -1.0}
+    best_point = {'platform_level': -1.0, 'platform_length': 0.2, 'mean_level': -1.0, 'mean_length': 0.2}
     best_score = {'wd': np.inf, 'f1-score': 0}
-    for iter in range(100):
+    for iter in range(50):
         if iter < number_of_random_search:
             next_point = {k: np.round(np.random.uniform(v[0], v[1]), 4) for k, v in pbounds.items()}
         else:
@@ -102,10 +93,10 @@ if __name__ == "__main__":
             best_score = {'wd': loss, 'f1score': f1}
         optimizer.register(params=next_point, target=-loss)
 
+    black_box_function(args, model, train_dataloader, val_dataloader, test_dataloader, valid_point,
+                       valid_anomaly_types, best_point, True)
+
     if len(wd) != 0 or len(f1score) != 0 or len(points) != 0:
-        # with open(f'logs/training/{args.trail}/wd_f1score.txt', 'w') as file:
-        # with open(f'logs/training/{args.trail}/sgd_wd_f1score_{valid_point["level"]}_{valid_point["length"]}.txt',
-        #           'w') as file:
         log_dir = f'logs/training/hpo'
         os.makedirs(log_dir, exist_ok=True)
         with open(f'{log_dir}/bayes_wd_f1score.txt', 'w') as file:

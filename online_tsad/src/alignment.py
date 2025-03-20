@@ -1,11 +1,15 @@
 import logging
 import math
+import os
+
 from geomloss import SamplesLoss
 import numpy as np
 import torch
 from sklearn.metrics import f1_score
 from sklearn.model_selection import train_test_split
 from torch import nn, optim
+import matplotlib.pyplot as plt
+from sklearn.manifold import TSNE
 
 logging.getLogger("lightning.pytorch.utilities.rank_zero").setLevel(logging.WARNING)
 logging.getLogger("pytorch_lightning").setLevel(logging.WARNING)
@@ -109,14 +113,14 @@ def classify(model, X_valid):
 
 
 def black_box_function(args, model, train_dataloader, val_dataloader, test_dataloader, valid_point, valid_anomaly_types,
-                       train_point):
+                       train_point, best=False):
     ratio_anomaly = 0.1
-    anomaly_types = ['platform', 'mean', 'spike']
+    anomaly_types = ['platform', 'mean']
 
     with torch.no_grad():
         z_train, x_train_np = [], []
         for x_batch in train_dataloader:
-            c_x = model(x_batch.to(0)).detach()
+            c_x = model(x_batch.to(args.device)).detach()
             z_train.append(c_x)
             x_train_np.append(x_batch.numpy())
         z_train = torch.cat(z_train, dim=0)
@@ -124,7 +128,7 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
 
         z_valid, x_valid_np = [], []
         for x_batch in val_dataloader:
-            c_x = model(x_batch.to(0)).detach()
+            c_x = model(x_batch.to(args.device)).detach()
             z_valid.append(c_x)
             x_valid_np.append(x_batch.numpy())
         z_valid = torch.cat(z_valid, dim=0)
@@ -135,11 +139,18 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
         valid_inlier_index, valid_outlier_index = train_test_split(range(len(x_valid_np)),
                                                                    train_size=1 - ratio_anomaly, random_state=0)
         x_valid_aug, valid_labels = list(), list()
+        inlier_num = 0
         for i in valid_outlier_index:
             for anomaly_type in anomaly_types:
                 if anomaly_type not in valid_anomaly_types:
                     x_valid_aug.append(x_valid_np[i])
                     valid_labels.append(np.zeros(len(x_valid_np[i])))
+                    inlier_num += 1
+
+        for i in valid_outlier_index:
+            for anomaly_type in anomaly_types:
+                if anomaly_type not in valid_anomaly_types:
+                    continue
                 else:
                     if anomaly_type == 'spike':
                         x_aug, l = inject(anomaly_type=anomaly_type, ts=x_valid_np[i],
@@ -218,13 +229,43 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
     z_train_aug = model(torch.tensor(np.array(x_train_aug)).float().unsqueeze(1).to(args.device))
     z_train_aug_t = emb.normalize(emb=z_train_aug)
 
-    W_loss = SamplesLoss("sinkhorn", p=2, blur=0.05, scaling=0.9)
-    loss = W_loss(torch.cat([z_train_t, z_train_aug_t], dim=0), torch.cat([z_valid_t, z_valid_aug_t], dim=0))
+    if best is False:
+        W_loss = SamplesLoss("sinkhorn", p=2, blur=0.05, scaling=0.9)
+        loss = W_loss(torch.cat([z_train_t, z_train_aug_t], dim=0), torch.cat([z_valid_t, z_valid_aug_t], dim=0))
 
-    X = torch.cat([z_train_t, z_train_aug_t.detach()], dim=0)
-    y = torch.tensor(np.concatenate([np.zeros((len(train_inlier_index), x_train_np.shape[1])),
-                                     train_labels], axis=0)).to(args.device)
-    classify_model = train_classify_model(args=args, X_train=X, y_train=y)
-    y_pred = classify(model=classify_model, X_valid=z_valid_aug_t.detach())
-    f1score = f1_score(torch.tensor(np.array(valid_labels)).reshape(-1), y_pred.reshape(-1))
-    return loss.item(), f1score
+        X = torch.cat([z_train_t, z_train_aug_t.detach()], dim=0)
+        y = torch.tensor(np.concatenate([np.zeros((len(train_inlier_index), x_train_np.shape[1])),
+                                         train_labels], axis=0)).to(args.device)
+        classify_model = train_classify_model(args=args, X_train=X, y_train=y)
+        y_pred = classify(model=classify_model, X_valid=z_valid_aug_t.detach())
+        f1score = f1_score(torch.tensor(np.array(valid_labels)).reshape(-1), y_pred.reshape(-1))
+        return loss.item(), f1score
+    else:
+        z_valid_t = torch.cat([z_valid_t, z_valid_aug_t[:inlier_num]], dim=0)
+        z_valid_aug_t = z_valid_aug_t[inlier_num:]
+        visualize(z_train_t.detach(), z_train_aug_t.detach(), z_valid_t.detach(), z_valid_aug_t.detach())
+
+
+def visualize(train, trn_aug, test, test_aug):
+    xt = TSNE(n_components=2, random_state=42).fit_transform(
+        torch.cat([train, trn_aug, test, test_aug], dim=0).cpu().numpy())
+    plt.figure(figsize=(8, 6))
+    plt.scatter(xt[:len(train), 0], xt[:len(train), 1], c='b', alpha=0.5, label='Train Normal')
+    plt.scatter(xt[len(train):len(train) + len(trn_aug), 0], xt[len(train):len(train) + len(trn_aug), 1], c='orange',
+                alpha=0.5, label='Train Augmented')
+    plt.scatter(xt[len(train) + len(trn_aug):len(train) + len(trn_aug) + len(test), 0],
+                xt[len(train) + len(trn_aug):len(train) + len(trn_aug) + len(test), 1], c='g', alpha=0.5,
+                label='Test Normal')
+    plt.scatter(xt[len(train) + len(trn_aug) + len(test):len(train) + len(trn_aug) + len(test) + len(test_aug), 0],
+                xt[len(train) + len(trn_aug) + len(test):len(train) + len(trn_aug) + len(test) + len(test_aug), 1],
+                c='r', alpha=0.5, label='Test Anomaly')
+    plt.legend()
+    plt.xlabel('t-SNE 1')
+    plt.ylabel('t-SNE 2')
+    plt.tight_layout()
+    plt.title('Optimized train config vs test config')
+    log_dir = f'logs/training/hpo'
+    os.makedirs(log_dir, exist_ok=True)
+    plt.savefig(f'{log_dir}/visualization.pdf', dpi=500, bbox_inches='tight')
+    plt.show()
+    plt.close()
