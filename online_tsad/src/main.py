@@ -74,8 +74,8 @@ if __name__ == "__main__":
     # valid_point = {'platform': {"level": 0.5, "length": 0.3}}
     # valid_anomaly_types = ['mean']
 
-    pbounds = {'platform_level': (-1.0, 1.0), 'platform_length': (0.2, 0.5), 'mean_level': (-1.0, 1.0),
-               'mean_length': (0.2, 0.5)}
+    pbounds = {'platform_level': (-1.0, 1.0), 'platform_length': (0.0, 1.0), 'mean_level': (-1.0, 1.0),
+               'mean_length': (0.0, 1.0)}
     acquisition_function = UpperConfidenceBound(kappa=0.1)
     optimizer = BayesianOptimization(f=black_box_function, acquisition_function=acquisition_function,
                                      pbounds=pbounds, allow_duplicate_points=True, random_state=0)
