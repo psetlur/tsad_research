@@ -92,13 +92,12 @@ class Encoder(pl.LightningModule):
         start = int(len(ts_row) * start)
         length = int(len(ts_row) * length)
         ts_row[start: start + length] += float(level)
-        ts_row = ((ts_row - ts_row.min()) / (ts_row.max() - ts_row.min())) * 2 - 1
+        # ts_row = ((ts_row - ts_row.min()) / (ts_row.max() - ts_row.min())) * 2 - 1
         return ts_row
 
     def inject_spike(self, ts_row, level, start):
         start_idx = int(len(ts_row) * start)
         ts_row[start_idx] += float(level)
-        ts_row = ((ts_row - ts_row.min()) / (ts_row.max() - ts_row.min())) * 2 - 1
         return ts_row
 
     def inject(self, anomaly_type, ts, config):
@@ -129,26 +128,22 @@ class Encoder(pl.LightningModule):
                 meta.append(m)
 
                 # positive samples
-                s1 = np.random.uniform(0, 0.5)
                 s0 = m[0] + np.random.uniform(low=-TAU_LEVEL, high=TAU_LEVEL)
+                s1 = np.random.uniform(0, 0.5)
                 s2 = max(m[2] + np.random.uniform(low=-TAU_LENGTH, high=TAU_LENGTH), 0)
                 y_pos[i][0] = self.inject_platform(y_pos[i][0], s0, s1, s2)
                 meta_pos.append([s0, s1, s2])
 
                 # negative samples
-                neg_index = 0
-                while True:
-                    s1_neg = np.random.uniform(0, 0.5)
+                for neg_index in range(NUM_NEGATIVE):
                     s0_neg = m[0] + np.random.uniform(low=-RANGE_LEVEL, high=-TAU_LEVEL) \
                         if np.random.random() > 0.5 else m[0] + np.random.uniform(low=TAU_LEVEL, high=RANGE_LEVEL)
+                    s1_neg = np.random.uniform(0, 0.5)
                     s2_neg = max(m[2] + np.random.uniform(low=-RANGE_LENGTH, high=-TAU_LENGTH)
                                  if np.random.random() > 0.5 else
                                  m[2] + np.random.uniform(low=TAU_LENGTH, high=RANGE_LENGTH), 0)
                     y_neg[neg_index][i][0] = self.inject_platform(y_neg[neg_index][i][0], s0_neg, s1_neg, s2_neg)
                     meta_neg[neg_index].append([s0_neg, s1_neg, s2_neg])
-                    neg_index += 1
-                    if neg_index >= NUM_NEGATIVE:
-                        break
 
             c_y_dict[anomaly_type] = self(y)
             c_y_pos_dict[anomaly_type] = self(y_pos)

@@ -69,7 +69,7 @@ def inject_mean(ts_row, level, start, length):
     ts_row[start_a: start_a + length_a] += float(level)
     label[start_a: start_a + length_a] = 1
     ts_row = ((ts_row - ts_row.min()) / (ts_row.max() - ts_row.min())) * 2 - 1
-    return ts_row, label
+    # return ts_row, label
 
 
 def inject_spike(ts_row, level, start):
@@ -78,7 +78,6 @@ def inject_spike(ts_row, level, start):
     start_a = int(len(ts_row) * start)
     ts_row[start_a] += level
     label[start_a] = 1
-    ts_row = ((ts_row - ts_row.min()) / (ts_row.max() - ts_row.min())) * 2 - 1
     return ts_row, label
 
 
@@ -241,9 +240,9 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
         f1score = f1_score(torch.tensor(np.array(valid_labels)).reshape(-1), y_pred.reshape(-1))
         return loss.item(), f1score
     else:
-        z_valid_t = torch.cat([z_valid_t, z_valid_aug_t[:inlier_num]], dim=0)
-        z_valid_aug_t = z_valid_aug_t[inlier_num:]
-        visualize(z_train_t.detach(), z_train_aug_t.detach(), z_valid_t.detach(), z_valid_aug_t.detach())
+        z_valid = torch.cat([z_valid, z_valid_aug[:inlier_num]], dim=0)
+        z_valid_aug = z_valid_aug[inlier_num:]
+        visualize(z_train.detach(), z_train_aug.detach(), z_valid.detach(), z_valid_aug.detach())
 
 
 def visualize(train, trn_aug, test, test_aug):

@@ -283,8 +283,8 @@ def plot_wd_f1score_combined():
 
     plot_heatmap(data=wd, title=f'WD')
     plot_heatmap(data=f1score, title=f'F1-Score')
-    
-    
+
+
 def plot_wd_f1score_line(input_filepath, output_filepath, type = "wd", anomaly = "platform", level = 0.5, length = 0.3):
     df = pd.read_csv(input_filepath)
     plt.figure(figsize = (12, 10))
