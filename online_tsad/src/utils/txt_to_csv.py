@@ -1,61 +1,79 @@
 import csv
 import re
+import ast
 
-def parse_line(line):
-    data = {}
-
-    try:
-        # Extract iter
-        iter_match = re.search(r'iter: (\d+)', line)
-        if iter_match:
-            data['iter'] = int(iter_match.group(1))
-
-        # Extract level and length
-        next_point_match = re.search(r'next_point\.level\.length: ([^,]+)', line)
-        if next_point_match:
-            level_length_str = next_point_match.group(1)
-            parts = level_length_str.split('.')
-
-            if len(parts) >= 4:
-                # Combine parts to get level and length
-                data['level'] = float(parts[0] + '.' + parts[1])
-                data['length'] = float(parts[2] + '.' + parts[3])
-
-        # Extract wd
-        wd_match = re.search(r'wd: ([\d.]+)', line)
-        if wd_match:
-            data['wd'] = float(wd_match.group(1))
-
-        # Extract f1-score (rename to f1 in the output)
-        f1_match = re.search(r'f1-score: ([\d.]+)', line)
-        if f1_match:
-            data['f1'] = float(f1_match.group(1))
-
-    except Exception as e:
-        print(f"Error parsing line: {line}")
-        print(f"Error details: {e}")
-
-    return data
 
 def convert_txt_to_csv(input_file, output_file):
-    with open(input_file, 'r') as f_in, open(output_file, 'w', newline='') as f_out:
-        # Set up CSV writer
-        fieldnames = ['iter', 'level', 'length', 'wd', 'f1']
+    # Initialize variables
+    data_list = []
+    current_data = None
+
+    # Process file line by line
+    with open(input_file, 'r') as f:
+        for line in f:
+            line = line.strip()
+
+            if not line:  # Skip empty lines
+                continue
+
+            # Check if this is the start of a new iteration
+            iter_match = re.search(r'iter: (\d+)', line)
+            if iter_match:
+                # Save previous iteration data if it exists
+                if current_data is not None:
+                    data_list.append(current_data)
+
+                # Start a new iteration
+                current_iter = int(iter_match.group(1))
+                current_data = {'iter': current_iter}
+
+                # Extract other values from this line
+                wd_match = re.search(r'wd: ([\d.-]+)', line)
+                if wd_match:
+                    current_data['wd'] = float(wd_match.group(1))
+
+                f1_match = re.search(r'f1-score: ([\d.-]+)', line)
+                if f1_match:
+                    current_data['f1-score'] = float(f1_match.group(1))
+
+            # Check if this line contains next_point
+            elif 'next_point:' in line and current_data is not None:
+                next_point_match = re.search(r'next_point: ({[^}]+})', line)
+                if next_point_match:
+                    try:
+                        next_point_str = next_point_match.group(1)
+                        next_point = ast.literal_eval(next_point_str)
+
+                        current_data['platform_level'] = next_point.get('platform_level')
+                        current_data['platform_length'] = next_point.get('platform_length')
+                        current_data['mean_level'] = next_point.get('mean_level')
+                        current_data['mean_length'] = next_point.get('mean_length')
+                    except Exception as e:
+                        print(f"Error parsing next_point: {next_point_str}")
+                        print(f"Error details: {e}")
+
+            # Skip lines with valid_point (as instructed)
+
+        # Don't forget to add the last iteration
+        if current_data is not None:
+            data_list.append(current_data)
+
+    # Write to CSV
+    with open(output_file, 'w', newline='') as f_out:
+        fieldnames = ['iter', 'wd', 'f1-score', 'platform_level', 'platform_length', 'mean_level', 'mean_length']
         writer = csv.DictWriter(f_out, fieldnames=fieldnames)
         writer.writeheader()
 
-        # Process each line in the input file
-        for line in f_in:
-            line = line.strip()
-            if line:  # Skip empty lines
-                data = parse_line(line)
-                if all(key in data for key in fieldnames):  # Make sure all fields are present
-                    writer.writerow(data)
-                else:
-                    print(f"Skipping line due to missing fields: {line}")
+        for data in data_list:
+            if all(key in data for key in fieldnames):
+                writer.writerow(data)
+            else:
+                missing = set(fieldnames) - set(data.keys())
+                print(f"Skipping record for iter {data.get('iter', 'unknown')} due to missing fields: {missing}")
+
 
 # Usage
-input_file = 'logs/training/inject_spike/bayes_spike_0.5_logs.txt'  # Replace with your input file path
-output_file = 'logs/training/inject_spike/bayes_spike_0.5_logs.csv'  # Replace with your desired output file path
+input_file = 'logs/training/hpo_both/bayes_wd_f1score_both_0.5_0.3_logs.txt'
+output_file = 'logs/training/hpo_both/bayes_wd_f1score_both_0.5_0.3_logs.csv'
 convert_txt_to_csv(input_file, output_file)
 print(f'Conversion completed. CSV file saved to {output_file}')

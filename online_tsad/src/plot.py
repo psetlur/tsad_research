@@ -265,7 +265,7 @@ def plot_wd_f1score_combined():
                 plt.scatter(i, min_index, color='red', s=50, edgecolor='black', label='Min Value')
         else:
             for i in range(values.shape[1]):
-                column = values[i,:]
+                column = values[i, :]
                 max_index = np.argmax(column)
                 plt.scatter(i, max_index, color='red', s=50, edgecolor='black', label='Max Value')
 
@@ -285,32 +285,134 @@ def plot_wd_f1score_combined():
     plot_heatmap(data=f1score, title=f'F1-Score')
 
 
-def plot_wd_f1score_line(input_filepath, output_filepath, type = "wd", anomaly = "platform", level = 0.5, length = 0.3):
+def plot_wd_f1score_line(input_filepath, output_filepath, type="wd", anomaly="platform", level=0.5, length=0.3):
     df = pd.read_csv(input_filepath)
-    plt.figure(figsize = (12, 10))
+    plt.figure(figsize=(12, 10))
 
-    plt.plot(df['iter'], df[type], marker = 'o', linestyle = '-', color = 'blue', linewidth=2)
+    # Map 'f1' to 'f1-score' if needed (to match CSV column name)
+    column_name = "f1-score" if type == "f1" else type
 
+    # Plot original data points
+    plt.plot(df['iter'], df[column_name], marker='o', linestyle='-', color='blue',
+             linewidth=2, label='Actual Values')
+
+    # Calculate and plot the running best values
     if type == "wd":
-        min_wd = df['wd'].min()
-        min_wd_idx = df['wd'].idxmin()
-        min_wd_iter = df.loc[min_wd_idx, 'iter']
+        # Calculate running minimum WD for each iteration
+        df['running_best'] = df[column_name].cummin()
+        best_label = 'Running Min WD'
 
-        plt.scatter(min_wd_iter, min_wd, color='red', s=500, marker='*', zorder=5)
+        # Highlight global minimum
+        global_best = df[column_name].min()
+        global_idx = df[column_name].idxmin()
+        global_iter = df.loc[global_idx, 'iter']
+        global_label = 'Global Min WD'
+
     elif type == "f1":
-        max_f1 = df["f1"].max()
-        max_f1_idx = df["f1"].idxmax()
-        max_f1_iter = df.loc[max_f1_idx, 'iter']
+        # Calculate running maximum F1 for each iteration
+        df['running_best'] = df[column_name].cummax()
+        best_label = 'Running Max F1'
 
-        plt.scatter(max_f1_iter, max_f1, color='red', s=500, marker='*', zorder=5)
+        # Highlight global maximum
+        global_best = df[column_name].max()
+        global_idx = df[column_name].idxmax()
+        global_iter = df.loc[global_idx, 'iter']
+        global_label = 'Global Max F1'
+
+    # Plot running best as a separate line
+    plt.plot(df['iter'], df['running_best'], marker='o', linestyle='--',
+             color='green', linewidth=1.5, label=best_label)
+
+    # Highlight global best with a star
+    plt.scatter(global_iter, global_best, color='red', s=500, marker='*',
+                zorder=5, label=global_label)
 
     plt.xlabel("Iteration")
     plt.ylabel(type)
     plt.title(f"Iteration vs {type} for {anomaly} anomaly ({level}, {length})")
+    plt.legend()
+    plt.grid(True, linestyle='--', alpha=0.7)
     plt.tight_layout()
     plt.savefig(output_filepath)
     plt.show()
 
+
+def plot_level_length_changes(input_filepath, output_filepath, anomaly="platform", level=0.5, length=0.3):
+    # Read the CSV file
+    df = pd.read_csv(input_filepath)
+
+    # Create a figure with two subplots
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 12), sharex=True)
+
+    # Plot level changes in the top subplot
+    ax1.plot(df['iter'], df['platform_level'], marker='o', linestyle='-',
+             color='blue', linewidth=2, label='Platform Level')
+    ax1.plot(df['iter'], df['mean_level'], marker='s', linestyle='-',
+             color='orange', linewidth=2, label='Mean Level')
+
+    # Add a horizontal line for the target level
+    ax1.axhline(y=level, color='red', linestyle='--', alpha=0.7,
+                label=f'Target Level ({level})')
+
+    # Set up the top subplot
+    ax1.set_ylabel('Level', fontsize=12)
+    ax1.set_title(f'Level Changes Over Iterations for {anomaly.capitalize()} Anomaly',
+                  fontsize=14, fontweight='bold')
+    ax1.grid(True, linestyle='--', alpha=0.7)
+    ax1.legend(loc='best')
+
+    # Plot length changes in the bottom subplot
+    ax2.plot(df['iter'], df['platform_length'], marker='o', linestyle='-',
+             color='blue', linewidth=2, label='Platform Length')
+    ax2.plot(df['iter'], df['mean_length'], marker='s', linestyle='-',
+             color='orange', linewidth=2, label='Mean Length')
+
+    # Add a horizontal line for the target length
+    ax2.axhline(y=length, color='red', linestyle='--', alpha=0.7,
+                label=f'Target Length ({length})')
+
+    # Set up the bottom subplot
+    ax2.set_xlabel('Iteration', fontsize=12)
+    ax2.set_ylabel('Length', fontsize=12)
+    ax2.set_title(f'Length Changes Over Iterations for {anomaly.capitalize()} Anomaly',
+                  fontsize=14, fontweight='bold')
+    ax2.grid(True, linestyle='--', alpha=0.7)
+    ax2.legend(loc='best')
+
+    # Calculate and mark the final distance to target values
+    last_iter = df['iter'].max()
+    last_idx = df['iter'].idxmax()
+
+    last_platform_level = df.loc[last_idx, 'platform_level']
+    last_platform_length = df.loc[last_idx, 'platform_length']
+
+    # Annotate the final points
+    ax1.annotate(f'Final: {last_platform_level:.4f}',
+                 xy=(last_iter, last_platform_level),
+                 xytext=(last_iter - 1, last_platform_level),
+                 arrowprops=dict(arrowstyle='->'),
+                 fontsize=10)
+
+    ax2.annotate(f'Final: {last_platform_length:.4f}',
+                 xy=(last_iter, last_platform_length),
+                 xytext=(last_iter - 1, last_platform_length),
+                 arrowprops=dict(arrowstyle='->'),
+                 fontsize=10)
+
+    # Add a subtitle with optimization information
+    plt.figtext(0.5, 0.01,
+                f"Target values: Level={level}, Length={length} | "
+                f"Final platform values: Level={last_platform_level:.4f}, Length={last_platform_length:.4f}",
+                ha='center', fontsize=12, bbox=dict(boxstyle='round', alpha=0.1))
+
+    # Adjust layout
+    plt.tight_layout(rect=[0, 0.03, 1, 0.97])
+
+    # Save and show the figure
+    plt.savefig(output_filepath)
+    plt.show()
+
+    return fig
 
 
 if __name__ == "__main__":
@@ -318,17 +420,27 @@ if __name__ == "__main__":
     # plot_loss_curve(last=True)
     # plot_wd_f1score()
     # plot_wd_f1score_combined()
-    anomaly = "spike"
+    anomaly = "both"
     type = "f1"
     level = 0.5
     length = 0.3
     if anomaly == "spike":
         plot_wd_f1score_line(
-            input_filepath = f"logs/training/inject_spike/bayes_{anomaly}_{level}_logs.csv",
-            output_filepath = f"logs/training/inject_spike/bayes_{anomaly}_{level}_{type}.png",
-            type = type)
+            input_filepath=f"logs/training/inject_spike/bayes_{anomaly}_{level}_logs.csv",
+            output_filepath=f"logs/training/inject_spike/bayes_{anomaly}_{level}_{type}.png",
+            type=type)
     else:
-        plot_wd_f1score_line(
-            input_filepath = f"logs/training/inject_spike/bayes_{anomaly}_{level}_{length}_logs.csv",
-            output_filepath = f"logs/training/inject_spike/bayes_{anomaly}_{level}_{length}_{type}.png",
-            type = type)
+        # plot_wd_f1score_line(
+        #     input_filepath = f"logs/training/hpo_both/bayes_wd_f1score_{anomaly}_{level}_{length}_logs.csv",
+        #     output_filepath = f"logs/training/hpo_both/bayes_{type}_{anomaly}_{level}_{length}.png",
+        #     anomaly = anomaly,
+        #     level = level,
+        #     length = length,
+        #     type = type)
+        plot_level_length_changes(
+            input_filepath=f"logs/training/hpo_both/bayes_wd_f1score_{anomaly}_{level}_{length}_logs.csv",
+            output_filepath=f"logs/training/hpo_both/bayes_{type}_{anomaly}_{level}_{length}_graph.png",
+            anomaly=anomaly,
+            level=level,
+            length=length
+        )
