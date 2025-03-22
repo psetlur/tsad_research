@@ -101,146 +101,6 @@ def plot_wd_f1score():
         plot_heatmap(data=length_f1, title=f'{anomaly_type} F1-score', config_name='length')
 
 
-#
-# def plot_wd_f1score_combined():
-#     with open(f"logs/training/{trail}/wd_f1score.txt", "r") as f:
-#         lines = f.readlines()
-#         wd = ast.literal_eval(lines[0][4:])
-#         f1score = ast.literal_eval(lines[1][9:])
-#
-#     levels = np.round(np.arange(-1.0, 1.1, 0.1), 1)
-#     lengths = np.round(np.arange(0.20, 0.52, 0.02), 2)
-#     if trail == 'inject_spike':
-#         anomaly_types = ['platform', 'mean', 'spike']
-#     elif trail == 'second_anomaly':
-#         anomaly_types = ['platform', 'mean']
-#     else:
-#         raise Exception('Unsupported trail.')
-#     fixed_config = {'platform': {'level': 0.5, 'length': 0.3}, 'mean': {'level': 0.5, 'length': 0.3}}
-#     configs = {'level': levels, 'length': lengths}
-#     coordinate = list()
-#     n = 0
-#     if trail == 'inject_spike':
-#         for anomaly_type in anomaly_types:
-#             if anomaly_type == 'platform':
-#                 for config in configs['level']:
-#                     n += 1
-#                     coordinate.append(
-#                         f"({config}, {fixed_config['platform']['length']}, {fixed_config['mean']['level']}, "
-#                         f"{fixed_config['mean']['length']})/ {n}")
-#                 for config in configs['length']:
-#                     n += 1
-#                     coordinate.append(
-#                         f"({fixed_config['platform']['level']}, {config}, {fixed_config['mean']['level']}, "
-#                         f"{fixed_config['mean']['length']})/ {n}")
-#             elif anomaly_type == 'mean':
-#                 for config in configs['level']:
-#                     n += 1
-#                     coordinate.append(f"({fixed_config['platform']['level']}, {fixed_config['platform']['length']}, "
-#                                       f"{config}, {fixed_config['mean']['length']})/ {n}")
-#                 for config in configs['length']:
-#                     n += 1
-#                     coordinate.append(f"({fixed_config['platform']['level']}, {fixed_config['platform']['length']}, "
-#                                       f"{fixed_config['mean']['level']}, {config})/ {n}")
-#             else:
-#                 for config in configs['level']:
-#                     n += 1
-#                     coordinate.append(f"({fixed_config['platform']['level']}, {fixed_config['platform']['length']}, "
-#                                       f"{config}, {fixed_config['mean']['length']})/ {n}")
-#                 for config in configs['length']:
-#                     n += 1
-#                     coordinate.append(f"({fixed_config['platform']['level']}, {fixed_config['platform']['length']}, "
-#                                       f"{fixed_config['mean']['level']}, {config})/ {n}")
-#
-#     else:  # trail == 'second_anomaly'
-#         for anomaly_type in anomaly_types:
-#             if anomaly_type == 'platform':
-#                 for config in configs['level']:
-#                     n += 1
-#                     coordinate.append(
-#                         f"({config}, {fixed_config['platform']['length']}, {fixed_config['mean']['level']}, "
-#                         f"{fixed_config['mean']['length']})/ {n}")
-#                 for config in configs['length']:
-#                     n += 1
-#                     coordinate.append(
-#                         f"({fixed_config['platform']['level']}, {config}, {fixed_config['mean']['level']}, "
-#                         f"{fixed_config['mean']['length']})/ {n}")
-#             else:
-#                 for config in configs['level']:
-#                     n += 1
-#                     coordinate.append(f"({fixed_config['platform']['level']}, {fixed_config['platform']['length']}, "
-#                                       f"{config}, {fixed_config['mean']['length']})/ {n}")
-#                 for config in configs['length']:
-#                     n += 1
-#                     coordinate.append(f"({fixed_config['platform']['level']}, {fixed_config['platform']['length']}, "
-#                                       f"{fixed_config['mean']['level']}, {config})/ {n}")
-#
-#     def plot_heatmap(data, title):
-#         x = np.arange(len(coordinate))
-#         y = np.arange(len(coordinate))
-#
-#         values = np.zeros((len(coordinate), len(coordinate)))
-#         levels_num = len(levels)
-#         lengths_num = len(lengths)
-#
-#         for i1, train_anomaly in enumerate(anomaly_types):
-#             for train_config_name in data[train_anomaly].keys():
-#                 for i2, train_config in enumerate(data[train_anomaly][train_config_name].keys()):
-#                     for j1, valid_anomaly in enumerate(anomaly_types):
-#                         for valid_config_name in data[train_anomaly][train_config_name][train_config][
-#                             valid_anomaly].keys():
-#                             for j2, valid_config in enumerate(data[train_anomaly][train_config_name][train_config][
-#                                                                   valid_anomaly][valid_config_name].keys()):
-#                                 i = i1 * (levels_num + lengths_num)
-#                                 j = j1 * (levels_num + lengths_num)
-#                                 if train_config_name == 'level':
-#                                     i += i2
-#                                 else:  # train_config_name == 'length'
-#                                     i += levels_num + i2
-#                                 if valid_config_name == 'level':
-#                                     j += j2
-#                                 else:  # valid_config_name == 'length'
-#                                     j += levels_num + j2
-#
-#                                 values[i, j] = data[train_anomaly][train_config_name][train_config][valid_anomaly][
-#                                     valid_config_name][valid_config]
-#
-#         plt.figure(figsize=(20, 16))
-#         plt.pcolormesh(x, y, np.ma.masked_where(values == 0, values), cmap="viridis",
-#                        vmin=np.min(values), vmax=np.max(values))
-#         if title[-2:] == 'WD':
-#             for i in range(values.shape[1]):
-#                 column = values[i, :]
-#                 min_index = np.argmin(column)
-#                 plt.scatter(i, min_index, color='red', s=50, edgecolor='black', label='Min Value')
-#         else:
-#             for i in range(values.shape[1]):
-#                 column = values[i, :]
-#                 max_index = np.argmax(column)
-#                 plt.scatter(i, max_index, color='red', s=50, edgecolor='black', label='Max Value')
-#         plt.xticks(ticks=x, labels=coordinate, rotation=90)
-#         plt.yticks(ticks=y, labels=coordinate)
-#         plt.colorbar(label='Value')
-#         plt.xlabel(f'train')
-#         plt.ylabel(f'test')
-#         plt.title(title)
-#         handles, labels = plt.gca().get_legend_handles_labels()
-#         by_label = dict(zip(labels, handles))
-#         plt.legend(by_label.values(), by_label.keys(), loc='upper left')
-#         plt.savefig(f'logs/training/{trail}/{title}.pdf')
-#         plt.show()
-#
-#         # import plotly.express as px
-#         #
-#         # import pandas as pd
-#         # df = pd.DataFrame(values, index=coordinate, columns=coordinate)
-#         #
-#         # fig = px.imshow(df, text_auto=False, color_continuous_scale='Viridis')
-#         # fig.show()
-#
-#     plot_heatmap(data=wd, title=f'WD')
-#     plot_heatmap(data=f1score, title=f'F1-score')
-
 def plot_wd_f1score_combined():
     with open(f"logs/training/{trail}/wd_f1score.txt", "r") as f:
         lines = f.readlines()
@@ -415,32 +275,82 @@ def plot_level_length_changes(input_filepath, output_filepath, anomaly="platform
     return fig
 
 
+def plot_wd_f1score_spike():
+    with open(f"logs/training/{trail}/spike_wd_f1score.txt", "r") as f:
+        lines = f.readlines()
+        wd = ast.literal_eval(lines[0][4:])
+        f1score = ast.literal_eval(lines[1][9:])
+
+    def plot_heatmap(data, title, config_name):
+        configs = np.round(np.arange(0.1, 1.1, 0.1), 1)
+        x_config, y_config = np.meshgrid(configs, configs)
+
+        x_values = sorted(data.keys())
+        y_values = sorted(data[x_values[0]].keys())
+        values = np.zeros((len(y_values), len(x_values)))
+        for i, x in enumerate(x_values):
+            for j, y in enumerate(y_values):
+                values[j, i] = data[x][y]
+        plt.figure(figsize=(8, 6))
+        plt.pcolormesh(y_config, x_config, values, cmap="viridis", vmin=np.min(values), vmax=np.max(values))
+        # plt.pcolormesh(y_config, x_config, np.ma.masked_where(values == 0, values), cmap="viridis",
+        #                vmin=np.min(values), vmax=np.max(values))
+        # if title[-2:] == 'WD':
+        #     for i in range(values.shape[1]):
+        #         column = values[:, i]
+        #         min_index = np.argmin(column)
+        #         plt.scatter(x_config[min_index, i], y_config[min_index, i], color='red', s=50, edgecolor='black',
+        #                     label='Min Value')
+        # else:
+        #     for i in range(values.shape[1]):
+        #         column = values[:, i]
+        #         max_index = np.argmax(column)
+        #         plt.scatter(x_config[max_index, i], y_config[max_index, i], color='red', s=50, edgecolor='black',
+        #                     label='Max Value')
+        plt.xticks(configs, rotation=90)
+        plt.yticks(configs)
+        plt.colorbar(label='Value')
+        plt.xlabel(f'train_{config_name}')
+        plt.ylabel(f'test_{config_name}')
+        plt.title(title)
+        # handles, labels = plt.gca().get_legend_handles_labels()
+        # by_label = dict(zip(labels, handles))
+        # plt.legend(by_label.values(), by_label.keys(), loc='upper left')
+        plt.savefig(f'logs/training/{trail}/{title}.pdf')
+        plt.show()
+
+    plot_heatmap(data=wd, title=f'spike_WD', config_name='p')
+    plot_heatmap(data=f1score, title=f'spike_F1-score', config_name='p')
+
+
 if __name__ == "__main__":
     # plot_loss_curve(last=False)
     # plot_loss_curve(last=True)
     # plot_wd_f1score()
     # plot_wd_f1score_combined()
-    anomaly = "both"
-    type = "f1"
-    level = 0.5
-    length = 0.3
-    if anomaly == "spike":
-        plot_wd_f1score_line(
-            input_filepath=f"logs/training/inject_spike/bayes_{anomaly}_{level}_logs.csv",
-            output_filepath=f"logs/training/inject_spike/bayes_{anomaly}_{level}_{type}.png",
-            type=type)
-    else:
-        # plot_wd_f1score_line(
-        #     input_filepath = f"logs/training/hpo_both/bayes_wd_f1score_{anomaly}_{level}_{length}_logs.csv",
-        #     output_filepath = f"logs/training/hpo_both/bayes_{type}_{anomaly}_{level}_{length}.png",
-        #     anomaly = anomaly,
-        #     level = level,
-        #     length = length,
-        #     type = type)
-        plot_level_length_changes(
-            input_filepath=f"logs/training/hpo_both/bayes_wd_f1score_{anomaly}_{level}_{length}_logs.csv",
-            output_filepath=f"logs/training/hpo_both/bayes_{type}_{anomaly}_{level}_{length}_graph.png",
-            anomaly=anomaly,
-            level=level,
-            length=length
-        )
+    plot_wd_f1score_spike()
+
+    # anomaly = "both"
+    # type = "f1"
+    # level = 0.5
+    # length = 0.3
+    # if anomaly == "spike":
+    #     plot_wd_f1score_line(
+    #         input_filepath=f"logs/training/inject_spike/bayes_{anomaly}_{level}_logs.csv",
+    #         output_filepath=f"logs/training/inject_spike/bayes_{anomaly}_{level}_{type}.png",
+    #         type=type)
+    # else:
+    #     # plot_wd_f1score_line(
+    #     #     input_filepath = f"logs/training/hpo_both/bayes_wd_f1score_{anomaly}_{level}_{length}_logs.csv",
+    #     #     output_filepath = f"logs/training/hpo_both/bayes_{type}_{anomaly}_{level}_{length}.png",
+    #     #     anomaly = anomaly,
+    #     #     level = level,
+    #     #     length = length,
+    #     #     type = type)
+    #     plot_level_length_changes(
+    #         input_filepath=f"logs/training/hpo_both/bayes_wd_f1score_{anomaly}_{level}_{length}_logs.csv",
+    #         output_filepath=f"logs/training/hpo_both/bayes_{type}_{anomaly}_{level}_{length}_graph.png",
+    #         anomaly=anomaly,
+    #         level=level,
+    #         length=length
+    #     )

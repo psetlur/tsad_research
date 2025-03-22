@@ -97,17 +97,17 @@ class AnomFuncs:
         ts_row[start: start + length] += level
         return ts_row, start, length, level
 
-    @staticmethod
-    def inject_spike(ts_row, level_h0, level_h1, start):
-        start_index = int(len(ts_row) * start)
-
-        cdf = [0, level_h0, level_h0 + level_h1, 1]
-        level_r = np.digitize(np.random.random(1), bins=cdf)[0]
-        level = np.random.uniform(LEVEL_BINS[level_r - 1], LEVEL_BINS[level_r])
-
-        ts_row[start_index] += level
-
-        return ts_row, start_index, 1, level
+    # @staticmethod
+    # def inject_spike(ts_row, level_h0, level_h1, start):
+    #     start_index = int(len(ts_row) * start)
+    #
+    #     cdf = [0, level_h0, level_h0 + level_h1, 1]
+    #     level_r = np.digitize(np.random.random(1), bins=cdf)[0]
+    #     level = np.random.uniform(LEVEL_BINS[level_r - 1], LEVEL_BINS[level_r])
+    #
+    #     ts_row[start_index] += level
+    #
+    #     return ts_row, start_index, 1, level
 
     # @staticmethod
     # def inject_trend(ts_row, slope, start, length):
