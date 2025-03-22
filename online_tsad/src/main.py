@@ -73,14 +73,14 @@ if __name__ == "__main__":
     # # valid_point = {'platform': {"level": 0.5, "length": 0.3}}
     # # valid_anomaly_types = ['mean']
     #
-    # pbounds = {'platform_level': (-1.0, 1.0), 'platform_length': (0, 1), 'mean_level': (-1.0, 1.0),
-    #            'mean_length': (0, 1)}
+    # pbounds = {'platform_level': (-1.0, 1.0), 'platform_length': (0.0, 1.0), 'mean_level': (-1.0, 1.0),
+    #            'mean_length': (0.0, 1.0)}
     # acquisition_function = UpperConfidenceBound(kappa=0.1)
     # optimizer = BayesianOptimization(f=black_box_function, acquisition_function=acquisition_function,
     #                                  pbounds=pbounds, allow_duplicate_points=True, random_state=0)
     # number_of_random_search = 10
     # wd, f1score, points = list(), list(), list()
-    # best_point = {'platform_level': -1.0, 'platform_length': 0, 'mean_level': -1.0, 'mean_length': 0}
+    # best_point = {'platform_level': -1.0, 'platform_length': 0.2, 'mean_level': -1.0, 'mean_length': 0.2}
     # best_score = {'wd': np.inf, 'f1-score': 0}
     # for iter in range(100):
     #     if iter < number_of_random_search:
@@ -103,17 +103,16 @@ if __name__ == "__main__":
     # black_box_function(args, model, train_dataloader, val_dataloader, test_dataloader, valid_point,
     #                    valid_anomaly_types, best_point, True)
     #
-    # if len(wd) != 0 or len(f1score) != 0:
-    #     # log_dir = f'logs/training/hpo_both'
-    #     # os.makedirs(log_dir, exist_ok=True)
-    #     # with open(f'{log_dir}/bayes_wd_f1score_both_0.5_0.3.txt', 'w') as file:
-    #     with open(f'logs/training/{args.trail}/spike_wd_f1score.txt', 'w') as file:
+    # if len(wd) != 0 or len(f1score) != 0 or len(points) != 0:
+    #     log_dir = f'logs/training/hpo_both'
+    #     os.makedirs(log_dir, exist_ok=True)
+    #     with open(f'{log_dir}/bayes_wd_f1score_both_0.5_0.3.txt', 'w') as file:
     #         file.write('wd: ' + str(wd))
     #         file.write("\n")
     #         file.write('f1score: ' + str(f1score))
-    #         # file.write("\n")
-    #         # file.write('points: ' + str(points))
-    #         # file.write("\n")
-    #         # file.write('best_point: ' + str(best_point))
-    #         # file.write("\n")
-    #         # file.write('best_score: ' + str(best_score))
+    #         file.write("\n")
+    #         file.write('points: ' + str(points))
+    #         file.write("\n")
+    #         file.write('best_point: ' + str(best_point))
+    #         file.write("\n")
+    #         file.write('best_score: ' + str(best_score))
