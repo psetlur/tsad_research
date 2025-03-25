@@ -3,33 +3,42 @@ import torch
 import pytorch_lightning as pl
 from info_nce import InfoNCE
 from .model import CNNEncoder
-from scipy.stats import truncnorm, bernoulli
+from scipy.stats import bernoulli
+
+MIN_SPIKE_LEVEL = 0
+MIN_SPIKE_P = 0
+MAX_SPIKE_LEVEL = 20
+MAX_SPIKE_P = 0.05
+SPIKE_LEVEL_STEP = 2
+SPIKE_P_STEP = 0.01
 
 LENGTH_BINS = [0.2, 0.3, 0.4, 0.5]
 LEVEL_BINS = [-1, -0.33, 0.33, 1]
 TAU = 0.01
 TAU_LEVEL = 0.01
 TAU_LENGTH = 0.001
-TAU_P = 0.01
+TAU_SPIKE_LEVEL = 0.2
+TAU_SPIKE_P = 0.001
+
 RANGE = 0.5
 RANGE_LEVEL = 0.5
 RANGE_LENGTH = 0.1
-RANGE_P = 0.1
-
-FIXED_LEVEL = 0.5
-FIXED_LENGTH = 0.3
+RANGE_SPIKE_LEVEL = 5
+RANGE_SPIKE_P = 0.02
 
 GRID_PLATFORM_LEVEL = np.round(np.arange(-1, 1.1, 0.1), 1)
 GRID_MEAN_LEVEL = np.round(np.arange(-1, 1.1, 0.1), 1)
 GRID_MEAN_LEVEL = GRID_MEAN_LEVEL[GRID_MEAN_LEVEL != 0]
 GRID_LENGTH = np.round(np.arange(0.2, 0.51, 0.01), 2)
-GRID_P = np.round(np.arange(0.1, 1.1, 0.1), 1)
-CDF_PLATFORM_LEVEL = np.arange(0, 1, 1 / len(GRID_PLATFORM_LEVEL))
-CDF_MEAN_LEVEL = np.arange(0, 1, 1 / len(GRID_PLATFORM_LEVEL))
-CDF_LENGTH = np.arange(0, 1, 1 / len(GRID_LENGTH))
-CDF_P = np.arange(0, 1, 1 / len(GRID_P))
+GRID_SPIKE_LEVEL = np.arange(MIN_SPIKE_LEVEL + SPIKE_LEVEL_STEP, MAX_SPIKE_LEVEL + SPIKE_LEVEL_STEP, SPIKE_LEVEL_STEP)
+GRID_SPIKE_P = np.round(np.arange(MIN_SPIKE_P + SPIKE_P_STEP, MAX_SPIKE_P + SPIKE_P_STEP, SPIKE_P_STEP), 2)
 
-NUM_POSITIVE = 3
+CDF_PLATFORM_LEVEL = np.arange(0, 1, 1 / len(GRID_PLATFORM_LEVEL))
+CDF_MEAN_LEVEL = np.arange(0, 1, 1 / len(GRID_MEAN_LEVEL))
+CDF_LENGTH = np.arange(0, 1, 1 / len(GRID_LENGTH))
+CDF_SPIKE_LEVEL = np.arange(0, 1, 1 / len(GRID_SPIKE_LEVEL))
+CDF_SPIKE_P = np.arange(0, 1, 1 / len(GRID_SPIKE_P))
+
 NUM_NEGATIVE = 10
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -76,15 +85,7 @@ class Encoder(pl.LightningModule):
         self.normal_idx = set()
         self.normal_x = torch.tensor([]).to(device)
 
-        if self.args.trail == 'second_anomaly':
-            self.anomaly_types = ['platform', 'mean']
-        elif self.args.trail in ['inject_spike', 'inject_spike_with_one']:
-            self.anomaly_types = ['spike']
-        elif self.args.trail == 'three_anomalies':
-            self.anomaly_types = ['platform', 'mean', 'spike']
-        else:
-            self.anomaly_types = ['platform']
-            # raise Exception('Unsupported trail.')
+        self.anomaly_types = ['platform', 'mean', 'spike']
 
     def forward(self, x):
         x = self.encoder(x)
@@ -100,16 +101,11 @@ class Encoder(pl.LightningModule):
         start = int(len(ts_row) * start)
         length = int(len(ts_row) * length)
         ts_row[start: start + length] += float(level)
-        # ts_row = ((ts_row - ts_row.min()) / (ts_row.max() - ts_row.min())) * 2 - 1
         return ts_row
 
-    def inject_spike(self, ts_row, p):
-        direction = np.random.rand(len(ts_row)) < 0.5
-        spikes = np.zeros(len(ts_row))
-        spikes[direction] = truncnorm.rvs(-np.inf, -2, loc=0, scale=1, size=direction.sum())
-        spikes[~direction] = truncnorm.rvs(2, np.inf, loc=0, scale=1, size=(~direction).sum())
-        mask = bernoulli.rvs(p=p, size=len(ts_row))
-        ts_row += torch.tensor(mask * spikes).to(ts_row.device)
+    def inject_spike(self, ts_row, level, p):
+        mask = torch.tensor(bernoulli.rvs(p=p, size=len(ts_row)).astype(bool), device=ts_row.device)
+        ts_row[mask] *= level
         return ts_row
 
     def inject(self, anomaly_type, ts, config):
@@ -135,7 +131,8 @@ class Encoder(pl.LightningModule):
 
             for i in range(len(x)):
                 if anomaly_type == 'spike':
-                    m = [config_from_grid(CDF_P, GRID_P)]
+                    m = [config_from_grid(CDF_SPIKE_LEVEL, CDF_SPIKE_LEVEL),
+                         config_from_grid(CDF_SPIKE_P, GRID_SPIKE_P)]
                 elif anomaly_type == 'platform':
                     m = [config_from_grid(CDF_PLATFORM_LEVEL, GRID_PLATFORM_LEVEL), np.random.uniform(0, 0.5),
                          config_from_grid(CDF_LENGTH, GRID_LENGTH)]
@@ -147,8 +144,15 @@ class Encoder(pl.LightningModule):
 
                 # positive samples
                 if anomaly_type == 'spike':
-                    m_pos = [m[0] + np.random.uniform(low=-TAU_P, high=TAU_P)]
-                    m_pos[0] = min(m_pos[0], 1)
+                    # m_pos = [m[0] + np.random.uniform(low=-TAU_SPIKE_LEVEL, high=TAU_SPIKE_LEVEL),
+                    #          m[1] + np.random.uniform(low=-TAU_SPIKE_P, high=TAU_SPIKE_P)]
+                    # m_pos[0] = max(m_pos[0], 0)
+                    # m_pos[0] = min(m_pos[0], 20)
+                    # m_pos[1] = max(m_pos[1], 0)
+                    # m_pos[1] = min(m_pos[1], 0.05)
+                    m_pos = [np.random.uniform(low=m[0] - TAU_SPIKE_LEVEL,
+                                               high=max(m[0] + TAU_SPIKE_LEVEL, MAX_SPIKE_LEVEL)),
+                             np.random.uniform(low=m[1] - TAU_SPIKE_P, high=max(m[1] + TAU_SPIKE_P, MAX_SPIKE_P))]
                 else:
                     s0 = m[0] + np.random.uniform(low=-TAU_LEVEL, high=TAU_LEVEL)
                     s2 = max(m[2] + np.random.uniform(low=-TAU_LENGTH, high=TAU_LENGTH), 0)
@@ -159,10 +163,24 @@ class Encoder(pl.LightningModule):
                 # negative samples
                 for neg_index in range(NUM_NEGATIVE):
                     if anomaly_type == 'spike':
-                        m_neg = [m[0] + np.random.uniform(low=-RANGE_P, high=-TAU_P)
-                                 if np.random.random() > 0.5 else m[0] + np.random.uniform(low=TAU_P, high=RANGE_P)]
-                        m_neg[0] = max(m_neg[0], 0.1)
-                        m_neg[0] = min(m_neg[0], 1)
+                        # m_neg = [m[0] + np.random.uniform(low=-RANGE_SPIKE_LEVEL, high=-TAU_SPIKE_LEVEL)
+                        #          if np.random.random() > 0.5 else
+                        #          m[0] + np.random.uniform(low=TAU_SPIKE_LEVEL, high=RANGE_SPIKE_LEVEL),
+                        #          m[1] + np.random.uniform(low=-RANGE_SPIKE_P, high=-TAU_SPIKE_P)
+                        #          if np.random.random() > 0.5 else
+                        #          m[1] + np.random.uniform(low=TAU_SPIKE_P, high=RANGE_SPIKE_P)]
+                        # m_neg[0] = max(m_neg[0], 0)
+                        # m_neg[0] = min(m_neg[0], 20)
+                        # m_neg[1] = max(m_neg[1], 0)
+                        # m_neg[1] = min(m_neg[1], 0.05)
+                        m_neg = [np.random.uniform(low=MIN_SPIKE_LEVEL, high=m[0] - TAU_SPIKE_LEVEL)
+                                 if np.random.random() < ((m[0] - MIN_SPIKE_LEVEL - TAU_SPIKE_LEVEL)
+                                                          / MAX_SPIKE_LEVEL - MIN_SPIKE_LEVEL - 2 * TAU_SPIKE_LEVEL)
+                                 else np.random.uniform(low=m[0] + TAU_SPIKE_LEVEL, high=MAX_SPIKE_LEVEL),
+                                 np.random.uniform(low=MIN_SPIKE_P, high=m[1] - TAU_SPIKE_P)
+                                 if np.random.random() < ((m[1] - MIN_SPIKE_P - TAU_SPIKE_P)
+                                                          / MAX_SPIKE_P - MIN_SPIKE_P - 2 * TAU_SPIKE_P)
+                                 else np.random.uniform(low=m[1] + TAU_SPIKE_P, high=MAX_SPIKE_P)]
                     else:
                         s0_neg = m[0] + np.random.uniform(low=-RANGE_LEVEL, high=-TAU_LEVEL) \
                             if np.random.random() > 0.5 else m[0] + np.random.uniform(low=TAU_LEVEL, high=RANGE_LEVEL)
@@ -184,25 +202,20 @@ class Encoder(pl.LightningModule):
         # the ones with different types and normal.
         loss_global = 0
         for anomaly_type in self.anomaly_types:
-            if len(self.anomaly_types) == 1:
-                loss_global += self.info_loss(c_y_dict[anomaly_type], c_y_pos_dict[anomaly_type],
-                                              torch.cat([c_x, c_x_pos], dim=0))
-            else:
-                _c_y = list()
-                for _anomaly_type in self.anomaly_types:
-                    if _anomaly_type != anomaly_type:
-                        _c_y.append(c_y_dict[_anomaly_type])
-                _c_y = torch.cat(_c_y, dim=0)
-                loss_global += self.info_loss(c_y_dict[anomaly_type], c_y_pos_dict[anomaly_type],
-                                              torch.cat([c_x, c_x_pos, _c_y], dim=0))
+            _c_y = list()
+            for _anomaly_type in self.anomaly_types:
+                if _anomaly_type != anomaly_type:
+                    _c_y.append(c_y_dict[_anomaly_type])
+            _c_y = torch.cat(_c_y, dim=0)
+            loss_global += self.info_loss(c_y_dict[anomaly_type], c_y_pos_dict[anomaly_type],
+                                          torch.cat([c_x, c_x_pos, _c_y], dim=0))
         loss_global /= len(self.anomaly_types)
 
         ### Anomalies with far away hyperparameters should be far away propotional to delta.
         loss_local = 0
         for anomaly_type in self.anomaly_types:
             loss_local += sum([hard_negative_loss(c_y_dict[anomaly_type], c_y_pos_dict[anomaly_type],
-                                                  c_y_neg_dict[anomaly_type][i],
-                                                  np.array(meta_dict[anomaly_type]),
+                                                  c_y_neg_dict[anomaly_type][i], np.array(meta_dict[anomaly_type]),
                                                   np.array(meta_neg_dict[anomaly_type][i]))
                                for i in range(NUM_NEGATIVE)]) / NUM_NEGATIVE
         loss_local /= len(self.anomaly_types)
@@ -218,8 +231,7 @@ class Encoder(pl.LightningModule):
         if loss_global > 0 and loss_local > 0 and loss_normal > 0:
             pass
         else:
-            # raise Exception(f'loss_global: {loss_global}, loss_local: {loss_local}, loss_normal: {loss_normal}')
-            raise Warning(f'loss_global: {loss_global}, loss_local: {loss_local}, loss_normal: {loss_normal}')
+            raise Exception(f'loss_global: {loss_global}, loss_local: {loss_local}, loss_normal: {loss_normal}')
 
         self.log("loss_global", loss_global, prog_bar=True)
         self.log("loss_local", loss_local, prog_bar=True)

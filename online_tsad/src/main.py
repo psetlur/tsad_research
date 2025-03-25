@@ -40,10 +40,7 @@ if __name__ == "__main__":
     parser.add_argument("--ckpt_monitor", type=str, default='val_loss')
     parser.add_argument("--config_path", type=str, default='configs/default.yml')
     parser.add_argument("--strategy", type=str, default='auto')
-    # parser.add_argument("--trail", type=str, default='second_anomaly')
-    # parser.add_argument("--trail", type=str, default='inject_spike_with_one')
-    parser.add_argument("--trail", type=str, default='inject_spike')
-    # parser.add_argument("--trail", type=str, default='three_anomalies')
+    parser.add_argument("--trail", type=str, default='three_anomalies')
     # parser.add_argument("--device", type=str, default='cpu')
     parser.add_argument("--device", type=str, default='cuda:0')
     parser.add_argument("--test_mode", type=bool, default=False, action=argparse.BooleanOptionalAction)
@@ -103,16 +100,17 @@ if __name__ == "__main__":
     # black_box_function(args, model, train_dataloader, val_dataloader, test_dataloader, valid_point,
     #                    valid_anomaly_types, best_point, True)
     #
-    # if len(wd) != 0 or len(f1score) != 0 or len(points) != 0:
-    #     log_dir = f'logs/training/hpo_both'
-    #     os.makedirs(log_dir, exist_ok=True)
-    #     with open(f'{log_dir}/bayes_wd_f1score_both_0.5_0.3.txt', 'w') as file:
+    # if len(wd) != 0 or len(f1score) != 0:
+    #     # log_dir = f'logs/training/hpo_both'
+    #     # os.makedirs(log_dir, exist_ok=True)
+    #     # with open(f'{log_dir}/bayes_wd_f1score_both_0.5_0.3.txt', 'w') as file:
+    #     with open(f'logs/training/{args.trail}/wd_f1score.txt', 'w') as file:
     #         file.write('wd: ' + str(wd))
     #         file.write("\n")
     #         file.write('f1score: ' + str(f1score))
-    #         file.write("\n")
-    #         file.write('points: ' + str(points))
-    #         file.write("\n")
-    #         file.write('best_point: ' + str(best_point))
-    #         file.write("\n")
-    #         file.write('best_score: ' + str(best_score))
+    #         # file.write("\n")
+    #         # file.write('points: ' + str(points))
+    #         # file.write("\n")
+    #         # file.write('best_point: ' + str(best_point))
+    #         # file.write("\n")
+    #         # file.write('best_score: ' + str(best_score))

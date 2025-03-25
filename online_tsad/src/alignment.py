@@ -151,14 +151,14 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
                 x_train_aug, train_labels = list(), list()
                 for i in train_outlier_index:
                     x = x_train_np[i]
-                    xa, l = inject('spike', x, trail, [np.random.uniform(0, 0.5)])
+                    xa, l = inject('spike', x, args.trail, [np.random.uniform(0, 0.5)])
                     x_train_aug.append(xa)
                     train_labels.append(l)
 
                 x_valid_aug, valid_labels = list(), list()
                 for i in valid_outlier_index:
                     x = x_valid_np[i]
-                    xa, l = inject('spike', x, trail, [np.random.uniform(0, 0.5)])
+                    xa, l = inject('spike', x, args.trail, [np.random.uniform(0, 0.5)])
                     x_valid_aug.append(xa)
                     valid_labels.append(l)
 
@@ -188,7 +188,7 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
                     x_train_aug, train_labels = list(), list()
                     for i in train_outlier_index:
                         x = x_train_np[i]
-                        xa, l = inject('spike', x, trail, [p])
+                        xa, l = inject('spike', x, args.trail, [p])
                         x_train_aug.append(xa)
                         train_labels.append(l)
                     x_train_aug_dict[p] = x_train_aug
@@ -199,7 +199,7 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
                     x_valid_aug, valid_labels = list(), list()
                     for i in valid_outlier_index:
                         x = x_valid_np[i]
-                        xa, l = inject('spike', x, trail, [p])
+                        xa, l = inject('spike', x, args.trail, [p])
                         x_valid_aug.append(xa)
                         valid_labels.append(l)
                     x_valid_aug_dict[p] = x_valid_aug
