@@ -145,18 +145,14 @@ def plot_wd_f1score_combined():
     plot_heatmap(data=f1score, title=f'F1-Score')
 
 
-def plot_wd_f1score_line(input_filepath, output_filepath, type="wd", anomaly="platform", level=0.5, length=0.3):
+def plot_wd_f1score_line(input_filepath, output_filepath, type="wd", anomaly="platform", level=0.5, length=0.3, best_value=None, baseline=None):
     df = pd.read_csv(input_filepath)
     plt.figure(figsize=(12, 10))
 
-    # Map 'f1' to 'f1-score' if needed (to match CSV column name)
-    column_name = "f1-score" if type == "f1" else type
+    # Map 'f1' to 'f1score' to match CSV column name
+    column_name = "f1score" if type == "f1" else type
 
-    # Plot original data points
-    plt.plot(df['iter'], df[column_name], marker='o', linestyle='-', color='blue',
-             linewidth=2, label='Actual Values')
-
-    # Calculate and plot the running best values
+    # For WD type, handle scaling issues
     if type == "wd":
         # Calculate running minimum WD for each iteration
         df['running_best'] = df[column_name].cummin()
@@ -167,8 +163,30 @@ def plot_wd_f1score_line(input_filepath, output_filepath, type="wd", anomaly="pl
         global_idx = df[column_name].idxmin()
         global_iter = df.loc[global_idx, 'iter']
         global_label = 'Global Min WD'
-
-    elif type == "f1":
+        
+        # Determine appropriate y-axis limit
+        # Get the 75th percentile or a reasonable max value to focus on
+        y_max = min(df[column_name].quantile(0.75) * 1.5, df[column_name].median() * 5)
+        
+        # If we have extreme outliers, cap the values for visualization purposes
+        df['capped_values'] = df[column_name].clip(upper=y_max)
+        
+        # Plot capped values
+        plt.plot(df['iter'], df['capped_values'], marker='o', linestyle='-', color='blue',
+                 linewidth=2, label='WD Values (capped)')
+        
+        # Mark any capped values
+        capped_indices = df[df[column_name] > y_max].index
+        if not capped_indices.empty:
+            plt.scatter(df.loc[capped_indices, 'iter'], 
+                        [y_max] * len(capped_indices),
+                        marker='^', color='purple', s=100, 
+                        label=f'Values exceeding {y_max:.2f}')
+    else:
+        # For F1 score, plot normally
+        plt.plot(df['iter'], df[column_name], marker='o', linestyle='-', color='blue',
+                 linewidth=2, label='Actual Values')
+        
         # Calculate running maximum F1 for each iteration
         df['running_best'] = df[column_name].cummax()
         best_label = 'Running Max F1'
@@ -180,100 +198,120 @@ def plot_wd_f1score_line(input_filepath, output_filepath, type="wd", anomaly="pl
         global_label = 'Global Max F1'
 
     # Plot running best as a separate line
-    plt.plot(df['iter'], df['running_best'], marker='o', linestyle='--',
-             color='green', linewidth=1.5, label=best_label)
+    if type == "wd":
+        # For WD, cap the running best too
+        plt.plot(df['iter'], df['running_best'].clip(upper=y_max), marker='o', linestyle='--',
+                 color='green', linewidth=1.5, label=best_label)
+    else:
+        plt.plot(df['iter'], df['running_best'], marker='o', linestyle='--',
+                 color='green', linewidth=1.5, label=best_label)
 
     # Highlight global best with a star
-    plt.scatter(global_iter, global_best, color='red', s=500, marker='*',
-                zorder=5, label=global_label)
+    if type == "wd" and global_best > y_max:
+        # If global best is beyond the cap, place the star at the cap
+        plt.scatter(global_iter, y_max, color='red', s=500, marker='*',
+                    zorder=5, label=f'{global_label} ({global_best:.4f})')
+    else:
+        plt.scatter(global_iter, global_best, color='red', s=500, marker='*',
+                    zorder=5, label=global_label)
+    
+    # Add the horizontal line for the best value if provided
+    if best_value is not None:
+        best_type = "Best WD" if type == "wd" else "Best F1"
+        if type == "wd" and best_value > y_max:
+            # If best value exceeds the cap, don't show the line
+            plt.text(0.02, 0.98, f'{best_type} = {best_value:.4f} (beyond scale)', 
+                    transform=plt.gca().transAxes, verticalalignment='top',
+                    bbox=dict(boxstyle='round', facecolor='red', alpha=0.2))
+        else:
+            plt.axhline(y=best_value, color='red', linestyle='-', linewidth=2, 
+                       label=f'{best_type} = {best_value:.4f}')
+    
+    # Adding horizontal line for baseline
+    if baseline is not None:
+        baseline_type = "Baseline WD" if type == "wd" else "Baseline F1"
+        if type == "wd" and baseline > y_max:
+            # If baseline exceeds the cap, don't show the line
+            plt.text(0.02, 0.92, f'{baseline_type} = {baseline:.4f} (beyond scale)', 
+                    transform=plt.gca().transAxes, verticalalignment='top',
+                    bbox=dict(boxstyle='round', facecolor='red', alpha=0.2))
+        else:
+            plt.axhline(y=baseline, color='purple', linestyle='-', linewidth=2, 
+                       label=f'{baseline_type} = {baseline:.4f}')
 
     plt.xlabel("Iteration")
-    plt.ylabel(type)
-    plt.title(f"Iteration vs {type} for {anomaly} anomaly ({level}, {length})")
+    plt.ylabel(type.upper())
+    plt.title(f"{type.upper()} for {anomaly} anomalies (level={level}, length={length})")
+    
+    if type == "wd":
+        plt.text(0.5, 0.01, f"Note: Y-axis capped at {y_max:.2f} to focus on smaller WD values",
+                 ha='center', transform=plt.gcf().transFigure, fontsize=10,
+                 bbox=dict(boxstyle='round', facecolor='yellow', alpha=0.1))
+    
     plt.legend()
     plt.grid(True, linestyle='--', alpha=0.7)
     plt.tight_layout()
     plt.savefig(output_filepath)
     plt.show()
 
-
-def plot_level_length_changes(input_filepath, output_filepath, anomaly="platform", level=0.5, length=0.3):
+def plot_level_length_changes(input_filepath, output_filepath, level=0.5, length=0.3, spike_level=15, spike_p=0.03, anomaly="platform"):
     # Read the CSV file
     df = pd.read_csv(input_filepath)
 
-    # Create a figure with two subplots
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 12), sharex=True)
-
-    # Plot level changes in the top subplot
-    ax1.plot(df['iter'], df['platform_level'], marker='o', linestyle='-',
+    # Create a figure with four subplots
+    fig, axs = plt.subplots(4, 1, figsize=(14, 16), sharex=True)
+    
+    # Plot 1: Platform & Mean Levels only (separated from spike)
+    axs[0].plot(df['iter'], df['platform_level'], marker='.', linestyle='-',
              color='blue', linewidth=2, label='Platform Level')
-    ax1.plot(df['iter'], df['mean_level'], marker='s', linestyle='-',
+    axs[0].plot(df['iter'], df['mean_level'], marker='.', linestyle='-',
              color='orange', linewidth=2, label='Mean Level')
-
-    # Add a horizontal line for the target level
-    ax1.axhline(y=level, color='red', linestyle='--', alpha=0.7,
+    axs[0].axhline(y=level, color='red', linestyle='-', linewidth=3, alpha=1.0,
                 label=f'Target Level ({level})')
+    axs[0].set_ylabel('Level')
+    axs[0].set_title('Platform & Mean Level Changes Over Iterations')
+    axs[0].grid(True, linestyle='--', alpha=0.7)
+    axs[0].legend(loc='best')
+    
+    # Plot 2: Spike Level (separate)
+    axs[1].plot(df['iter'], df['spike_level'], marker='.', linestyle='-',
+             color='green', linewidth=2, label='Spike Level')
+    axs[1].axhline(y=spike_level, color='darkgreen', linestyle='-', linewidth=3, alpha=1.0,
+                label=f'Target Spike Level ({spike_level})')
+    axs[1].set_ylabel('Level')
+    axs[1].set_title('Spike Level Changes Over Iterations')
+    axs[1].grid(True, linestyle='--', alpha=0.7)
+    axs[1].legend(loc='best')
 
-    # Set up the top subplot
-    ax1.set_ylabel('Level', fontsize=12)
-    ax1.set_title(f'Level Changes Over Iterations for {anomaly.capitalize()} Anomaly',
-                  fontsize=14, fontweight='bold')
-    ax1.grid(True, linestyle='--', alpha=0.7)
-    ax1.legend(loc='best')
-
-    # Plot length changes in the bottom subplot
-    ax2.plot(df['iter'], df['platform_length'], marker='o', linestyle='-',
+    # Plot 3: Platform & Mean Length (combined)
+    axs[2].plot(df['iter'], df['platform_length'], marker='.', linestyle='-',
              color='blue', linewidth=2, label='Platform Length')
-    ax2.plot(df['iter'], df['mean_length'], marker='s', linestyle='-',
+    axs[2].plot(df['iter'], df['mean_length'], marker='.', linestyle='-',
              color='orange', linewidth=2, label='Mean Length')
-
-    # Add a horizontal line for the target length
-    ax2.axhline(y=length, color='red', linestyle='--', alpha=0.7,
+    axs[2].axhline(y=length, color='red', linestyle='-', linewidth=3, alpha=1.0,
                 label=f'Target Length ({length})')
+    axs[2].set_ylabel('Length')
+    axs[2].set_title('Platform & Mean Length Changes Over Iterations')
+    axs[2].grid(True, linestyle='--', alpha=0.7)
+    axs[2].legend(loc='best')
 
-    # Set up the bottom subplot
-    ax2.set_xlabel('Iteration', fontsize=12)
-    ax2.set_ylabel('Length', fontsize=12)
-    ax2.set_title(f'Length Changes Over Iterations for {anomaly.capitalize()} Anomaly',
-                  fontsize=14, fontweight='bold')
-    ax2.grid(True, linestyle='--', alpha=0.7)
-    ax2.legend(loc='best')
-
-    # Calculate and mark the final distance to target values
-    last_iter = df['iter'].max()
-    last_idx = df['iter'].idxmax()
-
-    last_platform_level = df.loc[last_idx, 'platform_level']
-    last_platform_length = df.loc[last_idx, 'platform_length']
-
-    # Annotate the final points
-    ax1.annotate(f'Final: {last_platform_level:.4f}',
-                 xy=(last_iter, last_platform_level),
-                 xytext=(last_iter - 1, last_platform_level),
-                 arrowprops=dict(arrowstyle='->'),
-                 fontsize=10)
-
-    ax2.annotate(f'Final: {last_platform_length:.4f}',
-                 xy=(last_iter, last_platform_length),
-                 xytext=(last_iter - 1, last_platform_length),
-                 arrowprops=dict(arrowstyle='->'),
-                 fontsize=10)
-
-    # Add a subtitle with optimization information
-    plt.figtext(0.5, 0.01,
-                f"Target values: Level={level}, Length={length} | "
-                f"Final platform values: Level={last_platform_level:.4f}, Length={last_platform_length:.4f}",
-                ha='center', fontsize=12, bbox=dict(boxstyle='round', alpha=0.1))
-
+    # Plot 4: Spike Probability (separate)
+    axs[3].plot(df['iter'], df['spike_p'], marker='.', linestyle='-',
+             color='green', linewidth=2, label='Spike Probability')
+    axs[3].axhline(y=spike_p, color='darkgreen', linestyle='-', linewidth=3, alpha=1.0,
+                label=f'Target Probability ({spike_p})')
+    axs[3].set_xlabel('Iteration')
+    axs[3].set_ylabel('Probability')
+    axs[3].set_title('Spike Probability Changes Over Iterations')
+    axs[3].grid(True, linestyle='--', alpha=0.7)
+    axs[3].legend(loc='best')
+    
     # Adjust layout
-    plt.tight_layout(rect=[0, 0.03, 1, 0.97])
-
-    # Save and show the figure
+    plt.tight_layout()
     plt.savefig(output_filepath)
     plt.show()
 
     return fig
-
 
 def plot_wd_f1score_spike():
     with open(f"logs/training/{trail}/spike_wd_f1score.txt", "r") as f:
@@ -328,29 +366,33 @@ if __name__ == "__main__":
     # plot_loss_curve(last=True)
     # plot_wd_f1score()
     # plot_wd_f1score_combined()
-    plot_wd_f1score_spike()
+    # plot_wd_f1score_spike()
 
-    # anomaly = "both"
-    # type = "f1"
-    # level = 0.5
-    # length = 0.3
-    # if anomaly == "spike":
-    #     plot_wd_f1score_line(
-    #         input_filepath=f"logs/training/inject_spike/bayes_{anomaly}_{level}_logs.csv",
-    #         output_filepath=f"logs/training/inject_spike/bayes_{anomaly}_{level}_{type}.png",
-    #         type=type)
-    # else:
-    #     # plot_wd_f1score_line(
-    #     #     input_filepath = f"logs/training/hpo_both/bayes_wd_f1score_{anomaly}_{level}_{length}_logs.csv",
-    #     #     output_filepath = f"logs/training/hpo_both/bayes_{type}_{anomaly}_{level}_{length}.png",
-    #     #     anomaly = anomaly,
-    #     #     level = level,
-    #     #     length = length,
-    #     #     type = type)
-    #     plot_level_length_changes(
-    #         input_filepath=f"logs/training/hpo_both/bayes_wd_f1score_{anomaly}_{level}_{length}_logs.csv",
-    #         output_filepath=f"logs/training/hpo_both/bayes_{type}_{anomaly}_{level}_{length}_graph.png",
-    #         anomaly=anomaly,
-    #         level=level,
-    #         length=length
-    #     )
+    anomaly = "all"
+    type = "wd"
+    level = 0.5
+    length = 0.3
+    best_value = 2.166018009185791
+    baseline = 5.897861957550049
+    kappa = 0.1
+    spike_level = 15
+    spike_p = 0.03
+
+    # plot_wd_f1score_line(
+    #     input_filepath = f"logs/csv/hpo_three/bayes_wd_f1score_{anomaly}_{level}_{length}_{kappa}.csv",
+    #     output_filepath = f"logs/csv/hpo_three/bayes_{type}_{anomaly}_{level}_{length}_{kappa}.png",
+    #     anomaly = anomaly,
+    #     level = level,
+    #     length = length,
+    #     type = type,
+    #     best_value = best_value,
+    #     baseline = baseline)
+    plot_level_length_changes(
+        input_filepath=f"logs/csv/hpo_three/bayes_wd_f1score_{anomaly}_{level}_{length}.csv",
+        output_filepath=f"logs/csv/hpo_three/bayes_{anomaly}_{level}_{length}_graph.png",
+        anomaly=anomaly,
+        level=level,
+        length=length,
+        spike_level = spike_level,
+        spike_p = spike_p
+    )

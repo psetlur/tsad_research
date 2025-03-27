@@ -15,6 +15,7 @@ import matplotlib.cm as cm
 from matplotlib.colors import LinearSegmentedColormap
 import itertools
 
+
 logging.getLogger("lightning.pytorch.utilities.rank_zero").setLevel(logging.WARNING)
 logging.getLogger("pytorch_lightning").setLevel(logging.WARNING)
 logging.basicConfig(level=logging.INFO)
@@ -319,6 +320,48 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
             else:
                 visualize(torch.cat([z_train.detach(), z_train_aug.detach()], dim=0),
                           torch.cat([z_valid.detach(), z_valid_aug.detach()], dim=0))
+
+def evaluate_specific_point(args, model, train_dataloader, val_dataloader, test_dataloader, specific_point):
+    """
+    Evaluate a specific point configuration to get its WD and F1 score
+    
+    specific_point: Dictionary with keys for the anomaly types present
+                   (e.g., {'platform': {'level': 0.5, 'length': 0.3}, 'spike': {'level': 15, 'p': 0.03}})
+    """
+    # Extract anomaly types from the specific_point dictionary
+    valid_anomaly_types = list(specific_point.keys())
+    
+    # We need to ensure ALL anomaly types are present in train_point
+    # even if they're not in valid_anomaly_types
+    train_point = {}
+    
+    # First add default values for all possible anomaly types
+    default_values = {
+        'platform': {'level': 0.0, 'length': 0.0},
+        'mean': {'level': 0.0, 'length': 0.0},
+        'spike': {'level': 0.0, 'p': 0.00}
+    }
+    
+    # Add all anomaly types with default values
+    for anomaly_type in ['platform', 'mean', 'spike']:
+        for param, value in default_values[anomaly_type].items():
+            train_point[f"{anomaly_type}_{param}"] = value
+    
+    # Then override with our specific values
+    for anomaly_type in valid_anomaly_types:
+        for param, value in specific_point[anomaly_type].items():
+            train_point[f"{anomaly_type}_{param}"] = value
+    
+    # Call black_box_function with the specific point
+    wd, f1 = black_box_function(
+        args, model, train_dataloader, val_dataloader, test_dataloader,
+        valid_point=specific_point,
+        valid_anomaly_types=valid_anomaly_types,
+        train_point=train_point,
+        best=False
+    )
+    
+    return wd, f1
 
 
 def visualize(train, test):
