@@ -57,11 +57,14 @@ def parse_txt_to_csv(input_file, output_file):
                 print(f"Error parsing dictionary: {match}")
                 print(f"Error details: {e}")
         
+        # Determine the number of iterations dynamically
+        num_iterations = max(len(wd_list), len(f1score_list), len(points_list))
+        
         # Create CSV rows
         rows = []
         
-        # Ensure we have exactly 101 rows (0 to 100)
-        for i in range(100):
+        # Use the dynamic number of iterations
+        for i in range(num_iterations):
             row = {
                 'iter': i,
                 'wd': wd_list[i] if i < len(wd_list) else '',
@@ -101,13 +104,14 @@ def parse_txt_to_csv(input_file, output_file):
                 writer.writerow(row)
         
         print(f"Successfully converted {input_file} to {output_file}")
+        print(f"Total iterations processed: {num_iterations}")
     
     except Exception as e:
         print(f"An error occurred: {e}")
 
 # Example usage
 if __name__ == "__main__":
-    input_file = "logs/training/hpo_three/bayes_wd_f1score_all_0.5_0.3_0.1.txt"
-    output_file = "logs/csv/hpo_three/bayes_wd_f1score_all_0.5_0.3_0.1.csv"
+    input_file = "logs/training/hpo_three/bayes_wd_f1score_all_0.5_0.3.txt"
+    output_file = "logs/csv/hpo_three/bayes_wd_f1score_all_0.5_0.3.csv"
     os.makedirs("logs/csv/hpo_three/", exist_ok=True)
     parse_txt_to_csv(input_file, output_file)

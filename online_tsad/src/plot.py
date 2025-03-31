@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 import ast
+import os
 
 # trail = 'second_anomaly'
 trail = 'inject_spike'
@@ -360,6 +361,120 @@ def plot_wd_f1score_spike():
     plot_heatmap(data=wd, title=f'spike_WD', config_name='p')
     plot_heatmap(data=f1score, title=f'spike_F1-score', config_name='p')
 
+def plot_level_length_step_function(input_filepath, output_filepath, level=0.5, length=0.3, spike_level=15, spike_p=0.03):
+    # Read the CSV file
+    df = pd.read_csv(input_filepath)
+    
+    # Track minimum WD seen so far at each iteration
+    df['min_wd_so_far'] = df['wd'].cummin()
+    
+    # Create a mask for rows where the min_wd changes
+    is_new_min = df['min_wd_so_far'] != df['min_wd_so_far'].shift(1)
+    is_new_min.iloc[0] = True  # First row is always a new minimum
+    
+    # Create a dataframe to store the best configuration at each iteration
+    best_config = pd.DataFrame(index=df.index)
+    best_config['iter'] = df['iter']
+    
+    # Initialize with values from the first row
+    current_best_idx = 0
+    
+    # Parameters to track
+    params = ['platform_level', 'platform_length', 'mean_level', 
+              'mean_length', 'spike_level', 'spike_p']
+    
+    # For each parameter, fill with the best value seen so far
+    for param in params:
+        best_config[param] = None
+    
+    # Fill the best_config dataframe with step function values
+    for i in range(len(df)):
+        if is_new_min.iloc[i]:
+            current_best_idx = i
+        
+        for param in params:
+            best_config.loc[i, param] = df.loc[current_best_idx, param]
+    
+    # Create a figure with four subplots
+    fig, axs = plt.subplots(4, 1, figsize=(14, 18), sharex=True)
+    
+    # Plot 1: Platform & Mean Levels
+    axs[0].plot(best_config['iter'], best_config['platform_level'], linestyle='-',
+             color='blue', linewidth=2, label='Platform Level')
+    axs[0].plot(best_config['iter'], best_config['mean_level'], linestyle='-',
+             color='orange', linewidth=2, label='Mean Level')
+    axs[0].axhline(y=level, color='red', linestyle='-', linewidth=3, alpha=0.7,
+                label=f'Target Level ({level})')
+    
+    # Add markers at change points
+    change_points = df[is_new_min]
+    for i, row in change_points.iterrows():
+        axs[0].plot(row['iter'], row['platform_level'], 'bo', markersize=8)
+        axs[0].plot(row['iter'], row['mean_level'], 'o', color='orange', markersize=8)
+    
+    axs[0].set_ylabel('Level')
+    axs[0].set_title('Platform & Mean Level Changes Over Iterations (Best Configuration)')
+    axs[0].grid(True, linestyle='--', alpha=0.7)
+    axs[0].legend(loc='best')
+    
+    # Plot 2: Spike Level
+    axs[1].plot(best_config['iter'], best_config['spike_level'], linestyle='-',
+             color='green', linewidth=2, label='Spike Level')
+    axs[1].axhline(y=spike_level, color='darkgreen', linestyle='-', linewidth=3, alpha=0.7,
+                label=f'Target Spike Level ({spike_level})')
+    
+    # Add markers at change points
+    for i, row in change_points.iterrows():
+        axs[1].plot(row['iter'], row['spike_level'], 'go', markersize=8)
+    
+    axs[1].set_ylabel('Level')
+    axs[1].set_title('Spike Level Changes Over Iterations (Best Configuration)')
+    axs[1].grid(True, linestyle='--', alpha=0.7)
+    axs[1].legend(loc='best')
+    
+    # Plot 3: Platform & Mean Length
+    axs[2].plot(best_config['iter'], best_config['platform_length'], linestyle='-',
+             color='blue', linewidth=2, label='Platform Length')
+    axs[2].plot(best_config['iter'], best_config['mean_length'], linestyle='-',
+             color='orange', linewidth=2, label='Mean Length')
+    axs[2].axhline(y=length, color='red', linestyle='-', linewidth=3, alpha=0.7,
+                label=f'Target Length ({length})')
+    
+    # Add markers at change points
+    for i, row in change_points.iterrows():
+        axs[2].plot(row['iter'], row['platform_length'], 'bo', markersize=8)
+        axs[2].plot(row['iter'], row['mean_length'], 'o', color='orange', markersize=8)
+    
+    axs[2].set_ylabel('Length')
+    axs[2].set_title('Platform & Mean Length Changes Over Iterations (Best Configuration)')
+    axs[2].grid(True, linestyle='--', alpha=0.7)
+    axs[2].legend(loc='best')
+    
+    # Plot 4: Spike Probability
+    axs[3].plot(best_config['iter'], best_config['spike_p'], linestyle='-',
+             color='green', linewidth=2, label='Spike Probability')
+    axs[3].axhline(y=spike_p, color='darkgreen', linestyle='-', linewidth=3, alpha=0.7,
+                label=f'Target Probability ({spike_p})')
+    
+    # Add markers at change points
+    for i, row in change_points.iterrows():
+        axs[3].plot(row['iter'], row['spike_p'], 'go', markersize=8)
+    
+    axs[3].set_xlabel('Iteration')
+    axs[3].set_ylabel('Probability')
+    axs[3].set_title('Spike Probability Changes Over Iterations (Best Configuration)')
+    axs[3].grid(True, linestyle='--', alpha=0.7)
+    axs[3].legend(loc='best')
+    
+    # Add an overall title
+    plt.suptitle('Parameter Evolution Using Best Configuration at Each Iteration', 
+                fontsize=16, y=0.995)
+    
+    # Adjust layout
+    plt.tight_layout(rect=[0, 0, 1, 0.98])
+    plt.savefig(output_filepath, dpi=300, bbox_inches='tight')
+    
+    return fig
 
 if __name__ == "__main__":
     # plot_loss_curve(last=False)
@@ -374,9 +489,11 @@ if __name__ == "__main__":
     length = 0.3
     best_value = 2.166018009185791
     baseline = 5.897861957550049
-    kappa = 0.1
+    kappa = 0.7
     spike_level = 15
     spike_p = 0.03
+
+
 
     # plot_wd_f1score_line(
     #     input_filepath = f"logs/csv/hpo_three/bayes_wd_f1score_{anomaly}_{level}_{length}_{kappa}.csv",
@@ -387,10 +504,9 @@ if __name__ == "__main__":
     #     type = type,
     #     best_value = best_value,
     #     baseline = baseline)
-    plot_level_length_changes(
-        input_filepath=f"logs/csv/hpo_three/bayes_wd_f1score_{anomaly}_{level}_{length}.csv",
-        output_filepath=f"logs/csv/hpo_three/bayes_{anomaly}_{level}_{length}_graph.png",
-        anomaly=anomaly,
+    plot_level_length_step_function(
+        input_filepath=f"logs/csv/hpo_three/bayes_wd_f1score_{anomaly}_{level}_{length}_{kappa}.csv",
+        output_filepath=f"logs/graphs/hpo_three/bayes_{anomaly}_{level}_{length}_{kappa}_graph.png",
         level=level,
         length=length,
         spike_level = spike_level,
