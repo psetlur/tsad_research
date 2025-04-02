@@ -7,7 +7,7 @@ import pytorch_lightning as pl
 from bayes_opt import BayesianOptimization
 from bayes_opt.acquisition import UpperConfidenceBound
 from train_model import train_model
-from alignment import black_box_function
+from alignment import black_box_function, evaluate_specific_point
 from data.custom_dataloader import get_dataloaders
 from datetime import datetime
 import numpy as np
