@@ -3,8 +3,7 @@ import pandas as pd
 import numpy as np
 import ast
 
-# trail = 'second_anomaly'
-trail = 'inject_spike'
+trail = 'three_anomalies'
 
 
 def plot_loss_curve(last=False):
@@ -115,9 +114,8 @@ def plot_wd_f1score_combined():
             for j, y in enumerate(axis):
                 values[i, j] = data[x][y]
         axis = [f"{str(key)}/ {i}" for i, key in enumerate(axis)]
-        plt.figure(figsize=(20, 16))
-        plt.pcolormesh(num, num, np.ma.masked_where(values == 0, values), cmap="viridis", vmin=np.min(values),
-                       vmax=np.max(values))
+        plt.figure(figsize=(24, 18))
+        plt.pcolormesh(num, num, values, cmap="viridis", vmin=np.min(values),vmax=np.max(values))
         if title[-2:] == 'WD':
             for i in range(values.shape[1]):
                 column = values[i, :]
@@ -327,8 +325,8 @@ if __name__ == "__main__":
     # plot_loss_curve(last=False)
     # plot_loss_curve(last=True)
     # plot_wd_f1score()
-    # plot_wd_f1score_combined()
-    plot_wd_f1score_spike()
+    plot_wd_f1score_combined()
+    # plot_wd_f1score_spike()
 
     # anomaly = "both"
     # type = "f1"
