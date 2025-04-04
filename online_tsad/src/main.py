@@ -40,7 +40,8 @@ if __name__ == "__main__":
     parser.add_argument("--ckpt_monitor", type=str, default='val_loss')
     parser.add_argument("--config_path", type=str, default='configs/default.yml')
     parser.add_argument("--strategy", type=str, default='auto')
-    parser.add_argument("--trail", type=str, default='three_anomalies')
+    # parser.add_argument("--trail", type=str, default='three_anomalies')
+    parser.add_argument("--trail", type=str, default='six_anomalies')
     # parser.add_argument("--device", type=str, default='cpu')
     parser.add_argument("--device", type=str, default='cuda:0')
     parser.add_argument("--test_mode", type=bool, default=False, action=argparse.BooleanOptionalAction)
@@ -62,7 +63,7 @@ if __name__ == "__main__":
         [X_train], [X_val], [X_test, y_test], batch_size=m_config["batch_size"])
 
     model = train_model(args, m_config, train_dataloader, trainval_dataloader)
-    wd, f1score = black_box_function(args, model, train_dataloader, val_dataloader, test_dataloader)
+    # wd, f1score = black_box_function(args, model, train_dataloader, val_dataloader, test_dataloader)
 
     # # valid_point = {'platform': {"level": 0.5, "length": 0.3}, 'mean': {"level": 0.5, "length": 0.3},
     # #                'spike': {"level": 2, "p": 0.01}}

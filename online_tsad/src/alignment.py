@@ -15,7 +15,6 @@ import matplotlib.cm as cm
 from matplotlib.colors import LinearSegmentedColormap
 import itertools
 
-
 logging.getLogger("lightning.pytorch.utilities.rank_zero").setLevel(logging.WARNING)
 logging.getLogger("pytorch_lightning").setLevel(logging.WARNING)
 logging.basicConfig(level=logging.INFO)
@@ -91,7 +90,9 @@ def inject_trend(ts_row, slope, start, length):
     label = np.zeros(len(ts_row))
     start_a = int(len(ts_row) * start)
     length_a = int(len(ts_row) * length)
-    ts_row[start_a: start_a + length_a] += np.arange(0, length_a) * slope
+    slope_a = np.arange(0, length_a) * slope
+    ts_row[start_a: start_a + length_a] += slope_a
+    ts_row[start_a + length_a:] += np.full(len(ts_row) - start_a - length_a, slope_a[-1])
     label[start_a: start_a + length_a] = 1
     return ts_row, label
 
@@ -156,32 +157,32 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
     spike_level_step = 2
     spike_p_step = 0.01
 
-    min_amplitude_level = 0.5
+    min_amplitude_level = [0.1, 2]
     min_amplitude_length = 0.2
-    max_amplitude_level = 2.1
+    max_amplitude_level = [1, 11]
     max_amplitude_length = 0.52
-    fixed_amplitude_level = 2
+    fixed_amplitude_level = [0.1, 10]
     fixed_amplitude_length = 0.3
     amplitude_level_step = 1.5
     amplitude_length_step = 0.02
 
-    min_amplitude_level = 0.5
-    min_amplitude_length = 0.2
-    max_amplitude_level = 2.1
-    max_amplitude_length = 0.52
-    fixed_trend_level = 0.005
-    fixed_trend_length = 0.5
-    amplitude_level_step = 1.5
-    amplitude_length_step = 0.02
+    min_trend_slope = [-0.01, 0.001]
+    min_trend_length = 0.2
+    max_trend_slope = [0, 0.011]
+    max_trend_length = 0.52
+    fixed_trend_slope = 0.01
+    fixed_trend_length = 0.3
+    trend_slope_step = 0.001
+    trend_length_step = 0.02
 
-    min_amplitude_level = 0.5
-    min_amplitude_length = 0.2
-    max_amplitude_level = 2.1
-    max_amplitude_length = 0.52
+    min_variance_level = 0.01
+    min_variance_length = 0.2
+    max_variance_level = 0.11
+    max_variance_length = 0.52
     fixed_variance_level = 0.1
-    fixed_variance_length = 0.5
-    amplitude_level_step = 1.5
-    amplitude_length_step = 0.02
+    fixed_variance_length = 0.3
+    variance_level_step = 0.01
+    variance_length_step = 0.02
 
     # spike_level_step = 18
     # spike_p_step = 0.04
@@ -193,8 +194,8 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
     # anomaly_types = ['mean']
     # anomaly_types = ['spike']
     # anomaly_types = ['amplitude']
-    # anomaly_types = ['trend']
-    anomaly_types = ['variance']
+    anomaly_types = ['trend']
+    # anomaly_types = ['variance']
 
     with torch.no_grad():
         z_train, x_train_np = [], []
@@ -232,11 +233,13 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
                 elif anomaly_type == 'spike':
                     x_aug, _ = inject_spike(x_train_np[i], fixed_spike_level, fixed_spike_p)
                 elif anomaly_type == 'amplitude':
-                    x_aug, _ = inject_amplitude(x_train_np[i], fixed_amplitude_level, np.random.uniform(0, 0.5),
+                    x_aug, _ = inject_amplitude(x_train_np[i], fixed_amplitude_level[1], np.random.uniform(0, 0.5),
                                                 fixed_amplitude_length)
                 elif anomaly_type == 'trend':
-                    x_aug, _ = inject_trend(x_train_np[i], fixed_trend_level, np.random.uniform(0, 0.5),
+                    x_aug, _ = inject_trend(x_train_np[i], fixed_trend_slope, np.random.uniform(0, 0.5),
                                             fixed_trend_length)
+                    visualize_time_series(x_train_np[i])
+                    visualize_time_series(x_aug)
                 elif anomaly_type == 'variance':
                     x_aug, _ = inject_variance(x_train_np[i], fixed_variance_level, np.random.uniform(0, 0.5),
                                                fixed_variance_length)
@@ -528,6 +531,7 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
         else:
             visualize(z_train.detach(), z_valid.detach(), z_train_aug.detach(), z_valid_aug.detach())
 
+
 def evaluate_specific_point(args, model, train_dataloader, val_dataloader, test_dataloader, specific_point):
     """
     Evaluate a specific point configuration to get its WD and F1 score
@@ -537,28 +541,28 @@ def evaluate_specific_point(args, model, train_dataloader, val_dataloader, test_
     """
     # Extract anomaly types from the specific_point dictionary
     valid_anomaly_types = list(specific_point.keys())
-    
+
     # We need to ensure ALL anomaly types are present in train_point
     # even if they're not in valid_anomaly_types
     train_point = {}
-    
+
     # First add default values for all possible anomaly types
     default_values = {
         'platform': {'level': 0.0, 'length': 0.0},
         'mean': {'level': 0.0, 'length': 0.0},
         'spike': {'level': 0.0, 'p': 0.00}
     }
-    
+
     # Add all anomaly types with default values
     for anomaly_type in ['platform', 'mean', 'spike']:
         for param, value in default_values[anomaly_type].items():
             train_point[f"{anomaly_type}_{param}"] = value
-    
+
     # Then override with our specific values
     for anomaly_type in valid_anomaly_types:
         for param, value in specific_point[anomaly_type].items():
             train_point[f"{anomaly_type}_{param}"] = value
-    
+
     # Call black_box_function with the specific point
     wd, f1 = black_box_function(
         args, model, train_dataloader, val_dataloader, test_dataloader,
@@ -567,7 +571,7 @@ def evaluate_specific_point(args, model, train_dataloader, val_dataloader, test_
         train_point=train_point,
         best=False
     )
-    
+
     return wd, f1
 
 
