@@ -189,12 +189,12 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
     # level_step = 2.0
     # length_step = 0.3
 
-    # anomaly_types = ['platform', 'mean', 'spike']
+    anomaly_types = ['platform', 'mean', 'spike', 'amplitude', 'trend', 'variance']
     # anomaly_types = ['platform']
     # anomaly_types = ['mean']
     # anomaly_types = ['spike']
     # anomaly_types = ['amplitude']
-    anomaly_types = ['trend']
+    # anomaly_types = ['trend']
     # anomaly_types = ['variance']
 
     with torch.no_grad():
@@ -238,13 +238,11 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
                 elif anomaly_type == 'trend':
                     x_aug, _ = inject_trend(x_train_np[i], fixed_trend_slope, np.random.uniform(0, 0.5),
                                             fixed_trend_length)
-                    visualize_time_series(x_train_np[i])
-                    visualize_time_series(x_aug)
+                    # visualize_time_series(x_train_np[i])
+                    # visualize_time_series(x_aug)
                 elif anomaly_type == 'variance':
                     x_aug, _ = inject_variance(x_train_np[i], fixed_variance_level, np.random.uniform(0, 0.5),
                                                fixed_variance_length)
-                    visualize_time_series(x_train_np[i])
-                    visualize_time_series(x_aug)
                 else:
                     raise Exception('Unsupported anomaly_type.')
                 x_augs.append(x_aug)
@@ -479,6 +477,15 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
                     elif anomaly_type == 'spike':
                         x_aug, l = inject_spike(x_valid_np[i], valid_point[anomaly_type]['level'],
                                                 valid_point[anomaly_type]['p'])
+                    elif anomaly_type == 'amplitude':
+                        x_aug, l = inject_amplitude(x_valid_np[i], valid_point[anomaly_type]['level'],
+                                                    np.random.uniform(0, 0.5), valid_point[anomaly_type]['length'])
+                    elif anomaly_type == 'trend':
+                        x_aug, l = inject_trend(x_valid_np[i], valid_point[anomaly_type]['slope'],
+                                                np.random.uniform(0, 0.5), valid_point[anomaly_type]['length'])
+                    elif anomaly_type == 'variance':
+                        x_aug, l = inject_variance(x_valid_np[i], valid_point[anomaly_type]['level'],
+                                                   np.random.uniform(0, 0.5), valid_point[anomaly_type]['length'])
                     else:
                         raise Exception('Unsupported anomaly_type.')
                     x_valid_aug.append(x_aug)
@@ -504,7 +511,13 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
                                             train_p[anomaly_type]['p'])
                 elif anomaly_type == 'amplitude':
                     x_aug, l = inject_amplitude(x_train_np[i], train_p[anomaly_type]['level'],
-                                                train_p[anomaly_type]['p'])
+                                                np.random.uniform(0, 0.5), train_p[anomaly_type]['length'])
+                elif anomaly_type == 'trend':
+                    x_aug, l = inject_trend(x_train_np[i], train_p[anomaly_type]['slope'],
+                                            np.random.uniform(0, 0.5), train_p[anomaly_type]['length'])
+                elif anomaly_type == 'variance':
+                    x_aug, l = inject_variance(x_train_np[i], train_p[anomaly_type]['level'],
+                                               np.random.uniform(0, 0.5), train_p[anomaly_type]['length'])
                 else:
                     raise Exception(f'Unsupported anomaly_type: {anomaly_type}.')
                 x_train_aug.append(x_aug)
