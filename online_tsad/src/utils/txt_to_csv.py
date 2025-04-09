@@ -24,63 +24,50 @@ def parse_txt_to_csv(input_file, output_file):
         # Extract points data more robustly
         points_start = content.find('points: [') + 9
         points_end = content.rfind('}]')
-        if points_end == -1:  # If there's no closing bracket
+        if points_end == -1:
             points_end = len(content)
         else:
-            points_end += 1  # Include the closing brace
+            points_end += 1
         
         points_str = content[points_start:points_end]
         
-        # Use regex to find all dictionaries
         dict_pattern = r'\{[^{}]*\}'
         dict_matches = re.findall(dict_pattern, points_str)
         
         points_list = []
         for match in dict_matches:
             try:
-                # Replace single quotes with double quotes for proper JSON parsing
-                json_str = match.replace("'", '"')
-                # Use ast.literal_eval which is safer for parsing Python literals
                 point_dict = ast.literal_eval(match)
-                
-                # Ensure all required keys are present
                 points_dict = {
                     'platform_level': point_dict.get('platform_level', ''),
                     'platform_length': point_dict.get('platform_length', ''),
                     'mean_level': point_dict.get('mean_level', ''),
                     'mean_length': point_dict.get('mean_length', ''),
                     'spike_level': point_dict.get('spike_level', ''),
-                    'spike_p': point_dict.get('spike_p', '')
+                    'spike_p': point_dict.get('spike_p', ''),
+                    'amplitude_level': point_dict.get('amplitude_level', ''),
+                    'amplitude_length': point_dict.get('amplitude_length', ''),
+                    'trend_slope': point_dict.get('trend_slope', ''),
+                    'trend_length': point_dict.get('trend_length', ''),
+                    'variance_level': point_dict.get('variance_level', ''),
+                    'variance_length': point_dict.get('variance_length', '')
                 }
                 points_list.append(points_dict)
             except (ValueError, SyntaxError) as e:
                 print(f"Error parsing dictionary: {match}")
                 print(f"Error details: {e}")
         
-        # Determine the number of iterations dynamically
         num_iterations = max(len(wd_list), len(f1score_list), len(points_list))
         
-        # Create CSV rows
         rows = []
-        
-        # Use the dynamic number of iterations
         for i in range(num_iterations):
             row = {
                 'iter': i,
                 'wd': wd_list[i] if i < len(wd_list) else '',
                 'f1score': f1score_list[i] if i < len(f1score_list) else ''
             }
-            
-            # Add points data if available
             if i < len(points_list):
-                row.update({
-                    'platform_level': points_list[i]['platform_level'],
-                    'platform_length': points_list[i]['platform_length'],
-                    'mean_level': points_list[i]['mean_level'],
-                    'mean_length': points_list[i]['mean_length'],
-                    'spike_level': points_list[i]['spike_level'],
-                    'spike_p': points_list[i]['spike_p']
-                })
+                row.update(points_list[i])
             else:
                 row.update({
                     'platform_level': '',
@@ -88,17 +75,24 @@ def parse_txt_to_csv(input_file, output_file):
                     'mean_level': '',
                     'mean_length': '',
                     'spike_level': '',
-                    'spike_p': ''
+                    'spike_p': '',
+                    'amplitude_level': '',
+                    'amplitude_length': '',
+                    'trend_slope': '',
+                    'trend_length': '',
+                    'variance_level': '',
+                    'variance_length': ''
                 })
-            
             rows.append(row)
         
-        # Write to CSV
         with open(output_file, 'w', newline='') as csvfile:
-            fieldnames = ['iter', 'wd', 'f1score', 'platform_level', 'platform_length', 
-                         'mean_level', 'mean_length', 'spike_level', 'spike_p']
-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            fieldnames = ['iter', 'wd', 'f1score', 'platform_level', 'platform_length',
+                          'mean_level', 'mean_length', 'spike_level', 'spike_p',
+                          'amplitude_level', 'amplitude_length',
+                          'trend_slope', 'trend_length',
+                          'variance_level', 'variance_length']
             
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
             for row in rows:
                 writer.writerow(row)
@@ -111,7 +105,7 @@ def parse_txt_to_csv(input_file, output_file):
 
 # Example usage
 if __name__ == "__main__":
-    input_file = "logs/training/hpo_three/bayes_wd_f1score_all_0.5_0.3.txt"
-    output_file = "logs/csv/hpo_three/bayes_wd_f1score_all_0.5_0.3.csv"
-    os.makedirs("logs/csv/hpo_three/", exist_ok=True)
+    input_file = "logs/training/six_anomalies/bayes_wd_f1score_p_m_s.txt"
+    output_file = "logs/csv/six_anomalies/bayes_wd_f1score_p_m_s.csv"
+    os.makedirs("logs/csv/six_anomalies/", exist_ok=True)
     parse_txt_to_csv(input_file, output_file)

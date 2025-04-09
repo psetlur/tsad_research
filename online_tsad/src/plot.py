@@ -474,39 +474,114 @@ def plot_level_length_step_function(input_filepath, output_filepath, level=0.5, 
     
     return fig
 
+def plot_running_best_only(input_filepath, output_filepath, type="wd", anomaly="platform", best_value=None, baseline=None):
+    df = pd.read_csv(input_filepath)
+    plt.figure(figsize=(12, 10))
+
+    column_name = "f1score" if type == "f1" else type
+
+    if type == "wd":
+        # Compute running minimum
+        df['running_best'] = df[column_name].cummin()
+        best_label = 'Running Min WD'
+
+        # Global min
+        global_best = df[column_name].min()
+        global_idx = df[column_name].idxmin()
+        global_iter = df.loc[global_idx, 'iter']
+        global_label = 'Global Min WD'
+
+        y_max = min(df[column_name].quantile(0.75) * 1.5, df[column_name].median() * 5)
+        df['running_best_capped'] = df['running_best'].clip(upper=y_max)
+
+        # Plot only running best
+        plt.plot(df['iter'], df['running_best_capped'], marker='o', linestyle='--',
+                 color='green', linewidth=2, label=best_label)
+    else:
+        # Compute running maximum
+        df['running_best'] = df[column_name].cummax()
+        best_label = 'Running Max F1'
+
+        # Global max
+        global_best = df[column_name].max()
+        global_idx = df[column_name].idxmax()
+        global_iter = df.loc[global_idx, 'iter']
+        global_label = 'Global Max F1'
+
+        plt.plot(df['iter'], df['running_best'], marker='o', linestyle='--',
+                 color='green', linewidth=2, label=best_label)
+
+    # Mark global best
+    y_global = y_max if (type == "wd" and global_best > y_max) else global_best
+    plt.scatter(global_iter, y_global, color='red', s=500, marker='*',
+                zorder=5, label=f'{global_label} ({global_best:.4f})')
+
+    # Horizontal line for provided best
+    if best_value is not None:
+        best_type = "Best WD" if type == "wd" else "Best F1"
+        if type == "wd" and best_value > y_max:
+            plt.text(0.02, 0.98, f'{best_type} = {best_value:.4f} (beyond scale)', 
+                     transform=plt.gca().transAxes, verticalalignment='top',
+                     bbox=dict(boxstyle='round', facecolor='red', alpha=0.2))
+        else:
+            plt.axhline(y=best_value, color='red', linestyle='-', linewidth=2, 
+                        label=f'{best_type} = {best_value:.4f}')
+
+    # Horizontal line for baseline
+    if baseline is not None:
+        baseline_type = "Baseline WD" if type == "wd" else "Baseline F1"
+        if type == "wd" and baseline > y_max:
+            plt.text(0.02, 0.92, f'{baseline_type} = {baseline:.4f} (beyond scale)', 
+                     transform=plt.gca().transAxes, verticalalignment='top',
+                     bbox=dict(boxstyle='round', facecolor='red', alpha=0.2))
+        else:
+            plt.axhline(y=baseline, color='purple', linestyle='-', linewidth=2, 
+                        label=f'{baseline_type} = {baseline:.4f}')
+
+    plt.xlabel("Iteration")
+    plt.ylabel(type.upper())
+    plt.title(f"Running Best {type.upper()} for {anomaly} anomalies")
+    
+    if type == "wd":
+        plt.text(0.5, 0.01, f"Note: Y-axis capped at {y_max:.2f} to focus on smaller WD values",
+                 ha='center', transform=plt.gcf().transFigure, fontsize=10,
+                 bbox=dict(boxstyle='round', facecolor='yellow', alpha=0.1))
+
+    plt.legend()
+    plt.grid(True, linestyle='--', alpha=0.7)
+    plt.tight_layout()
+    plt.savefig(output_filepath)
+    plt.show()
+
 if __name__ == "__main__":
     # plot_loss_curve(last=False)
     # plot_loss_curve(last=True)
     # plot_wd_f1score()
-    plot_wd_f1score_combined()
+    # plot_wd_f1score_combined()
     # plot_wd_f1score_spike()
 
-    anomaly = "all"
-    type = "wd"
-    level = 0.5
-    length = 0.3
-    best_value = 2.166018009185791
-    baseline = 5.897861957550049
-    kappa = 0.7
+    anomaly = "p_m_s"
+    type = "f1"
+    best_value = 0.9457109583140565
+    baseline = 0.9231571297671333
+    kappa = 0.3
     spike_level = 15
     spike_p = 0.03
 
 
 
-    # plot_wd_f1score_line(
-    #     input_filepath = f"logs/csv/hpo_three/bayes_wd_f1score_{anomaly}_{level}_{length}_{kappa}.csv",
-    #     output_filepath = f"logs/csv/hpo_three/bayes_{type}_{anomaly}_{level}_{length}_{kappa}.png",
-    #     anomaly = anomaly,
-    #     level = level,
-    #     length = length,
-    #     type = type,
-    #     best_value = best_value,
-    #     baseline = baseline)
-    plot_level_length_step_function(
-        input_filepath=f"logs/csv/hpo_three/bayes_wd_f1score_{anomaly}_{level}_{length}_{kappa}.csv",
-        output_filepath=f"logs/graphs/hpo_three/bayes_{anomaly}_{level}_{length}_{kappa}_graph.png",
-        level=level,
-        length=length,
-        spike_level = spike_level,
-        spike_p = spike_p
-    )
+    plot_running_best_only(
+        input_filepath = f"logs/csv/six_anomalies/bayes_wd_f1score_{anomaly}.csv",
+        output_filepath = f"logs/csv/six_anomalies/bayes_{type}_{anomaly}.png",
+        anomaly = anomaly,
+        type = type,
+        best_value = best_value,
+        baseline = baseline)
+    # plot_level_length_step_function(
+    #     input_filepath=f"logs/csv/hpo_three/bayes_wd_f1score_{anomaly}_{level}_{length}_{kappa}.csv",
+    #     output_filepath=f"logs/graphs/hpo_three/bayes_{anomaly}_{level}_{length}_{kappa}_graph.png",
+    #     level=level,
+    #     length=length,
+    #     spike_level = spike_level,
+    #     spike_p = spike_p
+    # )
