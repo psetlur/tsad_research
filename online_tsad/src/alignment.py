@@ -88,14 +88,28 @@ def inject_amplitude(ts_row, level, start, length):
 def inject_trend(ts_row, slope, start, length):
     ts_row = np.array(ts_row)
     label = np.zeros(len(ts_row))
-    start_a = int(len(ts_row) * start)
-    length_a = int(len(ts_row) * length)
-    slope_a = np.arange(0, length_a) * slope
-    ts_row[start_a: start_a + length_a] += slope_a
-    ts_row[start_a + length_a:] += np.full(len(ts_row) - start_a - length_a, slope_a[-1])
-    label[start_a: start_a + length_a] = 1
-    return ts_row, label
+    ts_len = len(ts_row)
 
+    start = max(0.0, min(start, 1.0))
+    length = max(0.0, min(length, 1.0))
+
+    start_a = int(ts_len * start)
+    length_a = int(ts_len * length)
+
+    end_a = min(start_a + length_a, ts_len)
+    length_a = end_a - start_a
+
+    if length_a <= 0:
+        return ts_row, label # don't inject
+
+    slope_a = np.arange(0, length_a) * slope
+    ts_row[start_a : end_a] += slope_a
+    
+    if slope_a.size > 0 and end_a < ts_len:
+        ts_row[end_a:] += np.full(ts_len - end_a, slope_a[-1])
+
+    label[start_a : end_a] = 1
+    return ts_row, label
 
 def inject_variance(ts_row, level, start, length):
     ts_row = np.array(ts_row)
@@ -127,8 +141,9 @@ def classify(model, X_valid):
 
 
 def black_box_function(args, model, train_dataloader, val_dataloader, test_dataloader, valid_point=None,
-                       valid_anomaly_types=None, train_point=None, best=False):
+                       valid_anomaly_types=None, train_point=None, best=False, calculate_f1 = True):
     ratio_anomaly = 0.1
+    model.eval()
 
     min_platform_level = -1.0
     min_platform_length = 0.2
@@ -190,12 +205,6 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
     # length_step = 0.3
 
     anomaly_types = ['platform', 'mean', 'spike', 'amplitude', 'trend', 'variance']
-    # anomaly_types = ['platform']
-    # anomaly_types = ['mean']
-    # anomaly_types = ['spike']
-    # anomaly_types = ['amplitude']
-    # anomaly_types = ['trend']
-    # anomaly_types = ['variance']
 
     with torch.no_grad():
         z_train, x_train_np = [], []
@@ -531,18 +540,60 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
         z_valid_aug_t = emb.normalize(emb=z_valid_aug)
 
         if best is False:
+            # Calculate WD (loss) unconditionally
             W_loss = SamplesLoss("sinkhorn", p=2, blur=0.05, scaling=0.9)
-            loss = W_loss(z_train_aug_t, z_valid_aug_t)
+            loss_tensor = W_loss(z_train_aug_t, z_valid_aug_t)
+            loss = loss_tensor.item() # Get scalar value
 
-            X = torch.cat([z_train_t, z_train_aug_t.detach()], dim=0)
-            y = torch.tensor(np.concatenate([np.zeros((len(train_inlier_index), x_train_np.shape[1])),
-                                             train_labels], axis=0)).to(args.device)
-            classify_model = train_classify_model(args=args, X_train=X, y_train=y)
-            y_pred = classify(model=classify_model, X_valid=z_valid_aug_t.detach())
-            f1score = f1_score(torch.tensor(np.array(valid_labels)).reshape(-1), y_pred.reshape(-1))
-            return loss.item(), f1score
-        else:
-            visualize(z_train.detach(), z_valid.detach(), z_train_aug.detach(), z_valid_aug.detach())
+            f1score = 0.0 # Default F1 score
+
+            # Conditionally calculate F1 score
+            if calculate_f1:
+                # These calculations are only done if calculate_f1 is True
+                X = torch.cat([z_train_t, z_train_aug_t.detach()], dim=0)
+                # Check if train_labels is empty before concatenating
+                if len(train_labels) > 0:
+                     train_labels_np = np.array(train_labels)
+                     # Ensure sequence length matches
+                     seq_len = x_train_np.shape[1]
+                     if train_labels_np.shape[1] != seq_len:
+                          logging.warning(f"Train label sequence length mismatch ({train_labels_np.shape[1]} vs {seq_len}). Skipping F1.")
+                          # f1score remains 0.0
+                     else:
+                          y_np = np.concatenate([np.zeros((len(train_inlier_index), seq_len)),
+                                                 train_labels_np], axis=0)
+                          y = torch.tensor(y_np).to(args.device)
+
+                          classify_model = train_classify_model(args=args, X_train=X, y_train=y)
+
+                          # Check if valid_labels is empty before reshaping/scoring
+                          if len(valid_labels) > 0:
+                              y_pred = classify(model=classify_model, X_valid=z_valid_aug_t.detach())
+                              # Ensure valid_labels is a numpy array before reshaping
+                              valid_labels_np = np.array(valid_labels)
+                              if valid_labels_np.size == y_pred.size and valid_labels_np.size > 0:
+                                   # Update f1score only if calculation is successful
+                                   f1score = f1_score(valid_labels_np.reshape(-1), y_pred.reshape(-1), zero_division=0)
+                              else:
+                                   logging.warning(f"Label size mismatch or zero size for F1 score. True: {valid_labels_np.size}, Pred: {y_pred.size}. Setting F1 to 0.")
+                                   # f1score remains 0.0
+                          else:
+                              logging.warning("valid_labels list is empty. Cannot calculate F1 score.")
+                              # f1score remains 0.0
+                else:
+                     logging.warning("train_labels list is empty. Cannot train classifier or calculate F1 score.")
+                     # f1score remains 0.0
+
+            # **** Return statement is NOW OUTSIDE the 'if calculate_f1' block ****
+            # It returns the calculated loss and either the calculated f1score (if calculate_f1 was True)
+            # or the default f1score (0.0) (if calculate_f1 was False)
+            return loss, f1score
+
+        else: # Original 'best is True' path for visualization
+            # Ensure visualize function signature matches expected inputs
+            log_dir = f'logs/training/{args.trail}' # Define log_dir for visualization
+            visualize(z_train_t.cpu(), z_valid_t.cpu(), z_train_aug_t.cpu(), z_valid_aug_t.cpu())
+            return None, None # Match return signature, signalling completion of this path
 
 
 def evaluate_specific_point(args, model, train_dataloader, val_dataloader, test_dataloader, specific_point):

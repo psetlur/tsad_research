@@ -65,15 +65,20 @@ if __name__ == "__main__":
     model = train_model(args, m_config, train_dataloader, trainval_dataloader)
     # wd, f1score = black_box_function(args, model, train_dataloader, val_dataloader, test_dataloader)
 
-    # valid_point = {'platform': {"level": 0.5, "length": 0.3}, 'mean': {"level": 0.5, "length": 0.3},
-    #                'spike': {"level": 2, "p": 0.01}}
-    # valid_anomaly_types = ['platform', 'mean', 'spike']
-    # valid_point = {'mean': {"level": 0.5, "length": 0.3}}
-    # valid_anomaly_types = ['platform', 'mean']
-    valid_point = {'platform': {"level": 0.5, "length": 0.3}}
-    valid_anomaly_types = ['platform']
-    # valid_point = {'platform': {"level": 0.5, "length": 0.3}}
-    # valid_anomaly_types = ['mean']
+    valid_point = {'platform': {"level": 0.5, "length": 0.3}, 'mean': {"level": 0.5, "length": 0.3},
+                   'spike': {"level": 15, "p": 0.03}}
+    # valid_point = {'amplitude': {"level": 0.5, "length": 0.3}, 'trend': {"slope": 0.01, "length": 0.3},
+    #                'variance': {"level": 0.01, "length": 0.3}}
+    # valid_point = {
+    #     'platform': {"level": 0.5, "length": 0.3},
+    #     'mean': {"level": 0.5, "length": 0.3},
+    #     'spike': {"level": 15, "p": 0.03},
+    #     'amplitude': {"level": 0.5, "length": 0.3},
+    #     'trend': {"slope": 0.01, "length": 0.3},
+    #     'variance': {"level": 0.01, "length": 0.3}
+    # }
+
+    valid_anomaly_types = list(valid_point.keys())
 
     pbounds = {'platform_level': (-1.0, 1.0), 'platform_length': (0.0, 0.5),
                'mean_level': (-1.0, 1.0), 'mean_length': (0.0, 0.5),
@@ -81,10 +86,11 @@ if __name__ == "__main__":
                'amplitude_level': (0, 10), 'amplitude_length': (0.0, 0.5),
                'trend_slope': (-0.01, 0.01), 'trend_length': (0.0, 0.5),
                'variance_level': (0, 0.1), 'variance_length': (0.0, 0.5)}
-    acquisition_function = UpperConfidenceBound(kappa=0.1)
+    acquisition_function = UpperConfidenceBound(kappa=0.3)
     optimizer = BayesianOptimization(f=black_box_function, acquisition_function=acquisition_function,
                                      pbounds=pbounds, allow_duplicate_points=True, random_state=0)
     number_of_random_search = 10
+    f1_calculate_interval = 10
     wd, f1score, points = list(), list(), list()
     best_point = {'platform_level': 0, 'platform_length': 0,
                   'mean_level': 0, 'mean_length': 0,
@@ -93,38 +99,44 @@ if __name__ == "__main__":
                   'trend_slope': 0, 'trend_length': 0,
                   'variance_level': 0, 'variance_length': 0}
     best_score = {'wd': np.inf, 'f1-score': 0}
-    for iter in range(100):
+    for iter in range(1000):
         if iter < number_of_random_search:
             next_point = {k: np.round(np.random.uniform(v[0], v[1]), 4) for k, v in pbounds.items()}
         else:
             next_point = {k: np.round(v, 4) for k, v in optimizer.suggest().items()}
+
+        should_calculate_f1 = (iter % f1_calculate_interval == 0)
         loss, f1 = black_box_function(args, model, train_dataloader, val_dataloader, test_dataloader, valid_point,
-                                      valid_anomaly_types, next_point)
+                                      valid_anomaly_types, next_point, calculate_f1 = should_calculate_f1)
+
         print(f'iter: {iter}, wd: {loss}, f1-score: {f1}, \n'
               f'next_point: {next_point}, \n'
               f'valid_point: {valid_point}')
+
         wd.append(loss)
         f1score.append(f1)
         points.append(next_point)
+
         if loss < best_score['wd']:
             best_point = next_point
             best_score = {'wd': loss, 'f1score': f1}
+
         optimizer.register(params=next_point, target=-loss)
 
     black_box_function(args, model, train_dataloader, val_dataloader, test_dataloader, valid_point,
                        valid_anomaly_types, best_point, True)
 
-    # if len(wd) != 0 or len(f1score) != 0:
-    #     # log_dir = f'logs/training/hpo_both'
-    #     # os.makedirs(log_dir, exist_ok=True)
-    #     # with open(f'{log_dir}/bayes_wd_f1score_both_0.5_0.3.txt', 'w') as file:
-    #     with open(f'logs/training/{args.trail}/wd_f1score.txt', 'w') as file:
-    #         file.write('wd: ' + str(wd))
-    #         file.write("\n")
-    #         file.write('f1score: ' + str(f1score))
-    #         # file.write("\n")
-    #         # file.write('points: ' + str(points))
-    #         # file.write("\n")
-    #         # file.write('best_point: ' + str(best_point))
-    #         # file.write("\n")
-    #         # file.write('best_score: ' + str(best_score))
+    if len(wd) != 0 or len(f1score) != 0:
+        log_dir = f'logs/training/six_anomalies'
+        os.makedirs(log_dir, exist_ok=True)
+        with open(f'{log_dir}/bayes_wd_f1score_p_m_s.txt', 'w') as file:
+        # with open(f'logs/training/{args.trail}/wd_f1score.txt', 'w') as file:
+            file.write('wd: ' + str(wd))
+            file.write("\n")
+            file.write('f1score: ' + str(f1score))
+            file.write("\n")
+            file.write('points: ' + str(points))
+            file.write("\n")
+            file.write('best_point: ' + str(best_point))
+            file.write("\n")
+            file.write('best_score: ' + str(best_score))
