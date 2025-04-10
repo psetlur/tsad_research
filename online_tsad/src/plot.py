@@ -560,11 +560,10 @@ if __name__ == "__main__":
     # plot_wd_f1score_combined()
     # plot_wd_f1score_spike()
 
-    anomaly = "p_m_s"
-    type = "f1"
-    best_value = 0.9457109583140565
-    baseline = 0.9231571297671333
-    kappa = 0.3
+    anomaly = "all"
+    type = "wd"
+    best_value = 0.09507475793361664
+    baseline = 0.4806373715400696
     spike_level = 15
     spike_p = 0.03
 
