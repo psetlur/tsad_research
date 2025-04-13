@@ -105,7 +105,7 @@ def parse_txt_to_csv(input_file, output_file):
 
 # Example usage
 if __name__ == "__main__":
-    input_file = "logs/training/six_anomalies/bayes_wd_f1score_p_m_s.txt"
-    output_file = "logs/csv/six_anomalies/bayes_wd_f1score_p_m_s.csv"
+    input_file = "logs/training/six_anomalies/bayes_wd_f1score_all.txt"
+    output_file = "logs/csv/six_anomalies/bayes_wd_f1score_all.csv"
     os.makedirs("logs/csv/six_anomalies/", exist_ok=True)
     parse_txt_to_csv(input_file, output_file)

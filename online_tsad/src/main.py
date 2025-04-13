@@ -38,7 +38,7 @@ if __name__ == "__main__":
     parser.add_argument("--ckpt_monitor", type=str, default='val_loss')
     parser.add_argument("--config_path", type=str, default='configs/default.yml')
     parser.add_argument("--strategy", type=str, default='auto')
-    parser.add_argument("--trail", type=str, default='six_anomalies_stak_ucb_v2') # Updated trail name again
+    parser.add_argument("--trail", type=str, default='six_anomalies_dynamic')
     parser.add_argument("--device", type=str, default='cuda:0')
     parser.add_argument("--test_mode", type=bool, default=False, action=argparse.BooleanOptionalAction)
     parser.add_argument("--wandb", type=bool, default=False, action=argparse.BooleanOptionalAction)
@@ -79,7 +79,6 @@ if __name__ == "__main__":
                'trend_slope': (-0.01, 0.01), 'trend_length': (0.0, 0.5),
                'variance_level': (0, 0.1), 'variance_length': (0.0, 0.5)}
 
-    # Initialize optimizer without a function 'f', we call it manually
     optimizer = BayesianOptimization(f=None,
                                      pbounds=pbounds,
                                      allow_duplicate_points=True,
@@ -107,14 +106,14 @@ if __name__ == "__main__":
 
             if boost_active_counter > 0:
                 kappa_to_use_now = stak_params["boosted_kappa"]
-                print(f"  STAK: Boost active ({boost_active_counter} left). Kappa = {kappa_to_use_now:.4f}")
+                print(f"  Increased Kappa, ({boost_active_counter} left). Kappa = {kappa_to_use_now:.4f}")
                 boost_active_counter -= 1
                 current_kappa = stak_params["boosted_kappa"]
             else:
                 if stagnation_duration >= stak_params["stagnation_threshold"]:
                     kappa_to_use_now = stak_params["boosted_kappa"]
                     boost_active_counter = stak_params["boost_duration"] - 1
-                    print(f"  STAK: Stagnation ({stagnation_duration} iters). Boosting kappa. Kappa = {kappa_to_use_now:.4f}")
+                    print(f" Stagnation for ({stagnation_duration} iters). New Kappa = {kappa_to_use_now:.4f}")
                     current_kappa = stak_params["boosted_kappa"]
                 else:
                     cooled_kappa = current_kappa * stak_params["cooldown_factor"]
@@ -138,12 +137,10 @@ if __name__ == "__main__":
                  print("Warning: Optimizer space empty despite being past random search. Using random point.")
                  next_point = {k: np.round(np.random.uniform(v[0], v[1]), 4) for k, v in pbounds.items()}
 
-        # Evaluate
         should_calculate_f1 = (iter % f1_calculate_interval == 0) or (iter == total_iterations - 1) or (loss < best_score['wd'] - tolerance)
         loss, f1 = black_box_function(args, model, train_dataloader, val_dataloader, test_dataloader, valid_point,
                                       valid_anomaly_types, next_point, calculate_f1 = should_calculate_f1)
 
-        print(f'  Iter {iter}: WD={loss:.5f}, F1={f1 if f1 is not None else "N/A"}, Kappa Used={kappa_history[-1]:.4f}')
 
         wd_history.append(loss)
         f1score_history.append(f1)
@@ -152,7 +149,6 @@ if __name__ == "__main__":
         optimizer.register(params=next_point, target=-loss)
 
         if loss < best_score['wd'] - tolerance:
-            print(f"  *** New best WD: {loss:.5f} (improved from {best_score['wd']:.5f}) ***")
             best_score['wd'] = loss
             best_score['f1score'] = f1
             best_point = next_point
@@ -167,7 +163,7 @@ if __name__ == "__main__":
         final_loss, final_f1 = black_box_function(args, model, train_dataloader, val_dataloader, test_dataloader, valid_point,
                                                    valid_anomaly_types, best_point, calculate_f1=True)
         print(f"  Re-evaluation - WD: {final_loss:.5f}, F1: {final_f1:.4f}")
-        best_score['f1score'] = final_f1 # Update with the precise final F1
+        best_score['f1score'] = final_f1 
     else:
         print("No best point found (optimization might not have improved).")
 
@@ -183,7 +179,6 @@ if __name__ == "__main__":
             file.write(f"WD History ({len(wd_history)}): {wd_history}\n\n")
             file.write(f"F1 Score History ({len(f1score_history)}): {f1score_history}\n\n")
             file.write(f"Kappa History ({len(kappa_history)}): {kappa_history}\n\n")
-            # Saving points history - Note it can be large
             file.write(f"Points History ({len(points_history)}): {points_history}\n\n")
 
     print("--- Script Finished ---")
