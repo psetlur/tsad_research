@@ -86,7 +86,7 @@ if __name__ == "__main__":
                   'trend_slope': 0, 'trend_length': 0,
                   'variance_level': 0, 'variance_length': 0}
     l, f = black_box_function(args, model, train_dataloader, val_dataloader, test_dataloader, valid_point,
-                              valid_anomaly_types, best_point,False,False)
+                              valid_anomaly_types, best_point,False,True)
 
     print(1)
 

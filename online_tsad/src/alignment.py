@@ -137,21 +137,27 @@ def train_classify_model(args, X_train, y_train, sequence_length):
 
     num_epochs = 1000
     batch_size = 64
-    dataset = torch.utils.data.TensorDataset(X_train, y_train.float())  # Ensure y is float
-    loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    # dataset = torch.utils.data.TensorDataset(X_train, y_train.float())  # Ensure y is float
+    # loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    #
+    # model.train()
+    # for epoch in range(num_epochs):
+    #     epoch_loss = 0.0
+    #     for x_batch, y_batch in loader:
+    #         optimizer.zero_grad()
+    #         out = model(x_batch)
+    #         loss = criterion(out, y_batch)
+    #         loss.backward()
+    #         optimizer.step()
+    #         epoch_loss += loss.item()
+    for _ in range(1000):
+        out = model(X_train)
+        loss = criterion(out, y_train)
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
 
-    model.train()
-    for epoch in range(num_epochs):
-        epoch_loss = 0.0
-        for x_batch, y_batch in loader:
-            optimizer.zero_grad()
-            out = model(x_batch)
-            loss = criterion(out, y_batch)
-            loss.backward()
-            optimizer.step()
-            epoch_loss += loss.item()
-
-    model.eval()
+    # model.eval()
     return model
 
 
