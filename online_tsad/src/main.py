@@ -79,17 +79,6 @@ if __name__ == "__main__":
     valid_point = {'platform': {"level": 0.5, "length": 0.3}}
     valid_anomaly_types = list(valid_point.keys())
 
-    best_point = {'platform_level': 0.5, 'platform_length': 0.3,
-                  'mean_level': 0, 'mean_length': 0,
-                  'spike_level': 0, 'spike_p': 0,
-                  'amplitude_level': 0, 'amplitude_length': 0,
-                  'trend_slope': 0, 'trend_length': 0,
-                  'variance_level': 0, 'variance_length': 0}
-    l, f = black_box_function(args, model, train_dataloader, val_dataloader, test_dataloader, valid_point,
-                              valid_anomaly_types, best_point,False,True)
-
-    print(1)
-
     pbounds = {'platform_level': (-1.0, 1.0), 'platform_length': (0.0, 0.5),
                'mean_level': (-1.0, 1.0), 'mean_length': (0.0, 0.5),
                'spike_level': (0, 20), 'spike_p': (0.0, 1.0),

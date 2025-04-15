@@ -131,33 +131,15 @@ def train_classify_model(args, X_train, y_train, sequence_length):
         nn.ReLU(),
         nn.Linear(128, sequence_length)  # Output matches sequence length
     ).to(args.device)
-
     criterion = nn.BCEWithLogitsLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-
-    num_epochs = 1000
-    batch_size = 64
-    # dataset = torch.utils.data.TensorDataset(X_train, y_train.float())  # Ensure y is float
-    # loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
-    #
-    # model.train()
-    # for epoch in range(num_epochs):
-    #     epoch_loss = 0.0
-    #     for x_batch, y_batch in loader:
-    #         optimizer.zero_grad()
-    #         out = model(x_batch)
-    #         loss = criterion(out, y_batch)
-    #         loss.backward()
-    #         optimizer.step()
-    #         epoch_loss += loss.item()
     for _ in range(1000):
         out = model(X_train)
         loss = criterion(out, y_train)
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-
-    # model.eval()
+    model.eval()
     return model
 
 
@@ -227,9 +209,9 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
     variance_level_step = 0.01
     variance_length_step = 0.02
 
-    # anomaly_types = ['platform', 'mean', 'spike', 'amplitude', 'trend', 'variance']
+    anomaly_types = ['platform', 'mean', 'spike', 'amplitude', 'trend', 'variance']
     # anomaly_types = ['platform', 'mean', 'spike']
-    anomaly_types = ['platform']
+    # anomaly_types = ['platform']
     # anomaly_types = ['mean']
     # anomaly_types = ['spike']
     # anomaly_types = ['amplitude']
