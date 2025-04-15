@@ -7,4 +7,4 @@ model_params:
   batch_size: 128
   lr: 0.00001
   ts_input_size: 512
-  epochs: 1000
+  epochs: 100

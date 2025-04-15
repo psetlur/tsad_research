@@ -149,7 +149,9 @@ class Encoder(pl.LightningModule):
         self.normal_idx = set()
         self.normal_x = torch.tensor([]).to(device)
 
-        self.anomaly_types = ['platform', 'mean', 'spike', 'amplitude', 'trend', 'variance']
+        # self.anomaly_types = ['platform', 'mean', 'spike', 'amplitude', 'trend', 'variance']
+        self.anomaly_types = ['variance']
+        # self.anomaly_types = ['platform']
 
     def forward(self, x):
         x = self.encoder(x)
@@ -247,24 +249,37 @@ class Encoder(pl.LightningModule):
                         y_neg[neg_index][i][0] = self.inject_mean(y_neg[neg_index][i][0], *m_neg)
                         meta_neg[neg_index].append(m_neg)
                 elif anomaly_type == 'spike':
-                    m = [config_from_grid(CDF_SPIKE_LEVEL, CDF_SPIKE_LEVEL),
+                    m = [config_from_grid(CDF_SPIKE_LEVEL, GRID_SPIKE_LEVEL),
                          config_from_grid(CDF_SPIKE_P, GRID_SPIKE_P)]
                     y[i][0] = self.inject_spike(y[i][0], *m)
-                    m_pos = [np.random.uniform(low=m[0] - TAU_SPIKE_LEVEL,
-                                               high=min(m[0] + TAU_SPIKE_LEVEL, MAX_SPIKE_LEVEL)),
-                             np.random.uniform(low=m[1] - TAU_SPIKE_P, high=min(m[1] + TAU_SPIKE_P, MAX_SPIKE_P))]
+                    m_pos = [m[0] + np.random.uniform(low=-TAU_SPIKE_LEVEL, high=TAU_SPIKE_LEVEL),
+                             max(m[1] + np.random.uniform(low=-TAU_SPIKE_P, high=TAU_SPIKE_P), 0)]
                     y_pos[i][0] = self.inject_spike(y_pos[i][0], *m_pos)
                     for neg_index in range(NUM_NEGATIVE):
-                        m_neg = [np.random.uniform(low=MIN_SPIKE_LEVEL, high=m[0] - TAU_SPIKE_LEVEL)
-                                 if np.random.random() < ((m[0] - MIN_SPIKE_LEVEL - TAU_SPIKE_LEVEL)
-                                                          / MAX_SPIKE_LEVEL - MIN_SPIKE_LEVEL - 2 * TAU_SPIKE_LEVEL)
-                                 else np.random.uniform(low=m[0] + TAU_SPIKE_LEVEL, high=MAX_SPIKE_LEVEL),
-                                 np.random.uniform(low=MIN_SPIKE_P, high=m[1] - TAU_SPIKE_P)
-                                 if np.random.random() < ((m[1] - MIN_SPIKE_P - TAU_SPIKE_P)
-                                                          / MAX_SPIKE_P - MIN_SPIKE_P - 2 * TAU_SPIKE_P)
-                                 else np.random.uniform(low=m[1] + TAU_SPIKE_P, high=MAX_SPIKE_P)]
+                        m_neg = [m[0] + np.random.uniform(low=-RANGE_SPIKE_LEVEL, high=-TAU_SPIKE_LEVEL) \
+                                     if np.random.random() > 0.5 else
+                                 m[0] + np.random.uniform(low=TAU_SPIKE_LEVEL, high=RANGE_SPIKE_LEVEL),
+                                 max(m[1] + np.random.uniform(low=-RANGE_SPIKE_P, high=-TAU_SPIKE_P)
+                                     if np.random.random() > 0.5 else
+                                     m[1] + np.random.uniform(low=TAU_SPIKE_P, high=RANGE_SPIKE_P), 0)]
                         y_neg[neg_index][i][0] = self.inject_spike(y_neg[neg_index][i][0], *m_neg)
                         meta_neg[neg_index].append(m_neg)
+
+                    # m_pos = [np.random.uniform(low=m[0] - TAU_SPIKE_LEVEL,
+                    #                            high=min(m[0] + TAU_SPIKE_LEVEL, MAX_SPIKE_LEVEL)),
+                    #          np.random.uniform(low=m[1] - TAU_SPIKE_P, high=min(m[1] + TAU_SPIKE_P, MAX_SPIKE_P))]
+                    # y_pos[i][0] = self.inject_spike(y_pos[i][0], *m_pos)
+                    # for neg_index in range(NUM_NEGATIVE):
+                    #     m_neg = [np.random.uniform(low=MIN_SPIKE_LEVEL, high=m[0] - TAU_SPIKE_LEVEL)
+                    #              if np.random.random() < ((m[0] - MIN_SPIKE_LEVEL - TAU_SPIKE_LEVEL)
+                    #                                       / MAX_SPIKE_LEVEL - MIN_SPIKE_LEVEL - 2 * TAU_SPIKE_LEVEL)
+                    #              else np.random.uniform(low=m[0] + TAU_SPIKE_LEVEL, high=MAX_SPIKE_LEVEL),
+                    #              np.random.uniform(low=MIN_SPIKE_P, high=m[1] - TAU_SPIKE_P)
+                    #              if np.random.random() < ((m[1] - MIN_SPIKE_P - TAU_SPIKE_P)
+                    #                                       / MAX_SPIKE_P - MIN_SPIKE_P - 2 * TAU_SPIKE_P)
+                    #              else np.random.uniform(low=m[1] + TAU_SPIKE_P, high=MAX_SPIKE_P)]
+                    #     y_neg[neg_index][i][0] = self.inject_spike(y_neg[neg_index][i][0], *m_neg)
+                    #     meta_neg[neg_index].append(m_neg)
                 elif anomaly_type == 'amplitude':
                     index = 0
                     if np.random.random() > 0.5:
@@ -359,9 +374,13 @@ class Encoder(pl.LightningModule):
             for _anomaly_type in self.anomaly_types:
                 if _anomaly_type != anomaly_type:
                     _c_y.append(c_y_dict[_anomaly_type])
-            _c_y = torch.cat(_c_y, dim=0)
-            loss_global += self.info_loss(c_y_dict[anomaly_type], c_y_pos_dict[anomaly_type],
-                                          torch.cat([c_x, c_x_pos, _c_y], dim=0))
+            if len(_c_y) == 0:
+                loss_global += self.info_loss(c_y_dict[anomaly_type], c_y_pos_dict[anomaly_type],
+                                              torch.cat([c_x, c_x_pos], dim=0))
+            else:
+                _c_y = torch.cat(_c_y, dim=0)
+                loss_global += self.info_loss(c_y_dict[anomaly_type], c_y_pos_dict[anomaly_type],
+                                              torch.cat([c_x, c_x_pos, _c_y], dim=0))
         loss_global /= len(self.anomaly_types)
 
         ### Anomalies with far away hyperparameters should be far away propotional to delta.

@@ -163,7 +163,7 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
     max_amplitude_length = 0.52
     fixed_amplitude_level = [0.1, 10]
     fixed_amplitude_length = 0.3
-    amplitude_level_step = 1.5
+    amplitude_level_step = [0.1, 1]
     amplitude_length_step = 0.02
 
     min_trend_slope = [-0.01, 0.001]
@@ -184,12 +184,8 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
     variance_level_step = 0.01
     variance_length_step = 0.02
 
-    # spike_level_step = 18
-    # spike_p_step = 0.04
-    # level_step = 2.0
-    # length_step = 0.3
-
     anomaly_types = ['platform', 'mean', 'spike', 'amplitude', 'trend', 'variance']
+    # anomaly_types = ['platform', 'mean', 'spike']
     # anomaly_types = ['platform']
     # anomaly_types = ['mean']
     # anomaly_types = ['spike']
@@ -220,10 +216,10 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
                                                                train_size=1 - ratio_anomaly, random_state=0)
     emb = EmbNormalizer()
     if valid_point == None:
-        x_aug_list = list()
-        for anomaly_type in anomaly_types:
-            x_augs = list()
-            for i in train_outlier_index:
+        x_augs = list()
+        for index, anomaly_type in enumerate(anomaly_types):
+            for i in train_outlier_index[index * len(train_outlier_index) // len(anomaly_types):(index + 1) * len(
+                    train_outlier_index) // len(anomaly_types)]:
                 if anomaly_type == 'platform':
                     x_aug, _ = inject_platform(x_train_np[i], fixed_platform_level, np.random.uniform(0, 0.5),
                                                fixed_platform_length)
@@ -232,264 +228,431 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
                                            fixed_mean_length)
                 elif anomaly_type == 'spike':
                     x_aug, _ = inject_spike(x_train_np[i], fixed_spike_level, fixed_spike_p)
+                    # visualize_time_series(x_train_np[i])
+                    # visualize_time_series(x_aug)
                 elif anomaly_type == 'amplitude':
                     x_aug, _ = inject_amplitude(x_train_np[i], fixed_amplitude_level[1], np.random.uniform(0, 0.5),
                                                 fixed_amplitude_length)
                 elif anomaly_type == 'trend':
                     x_aug, _ = inject_trend(x_train_np[i], fixed_trend_slope, np.random.uniform(0, 0.5),
                                             fixed_trend_length)
-                    # visualize_time_series(x_train_np[i])
-                    # visualize_time_series(x_aug)
                 elif anomaly_type == 'variance':
                     x_aug, _ = inject_variance(x_train_np[i], fixed_variance_level, np.random.uniform(0, 0.5),
                                                fixed_variance_length)
                 else:
                     raise Exception('Unsupported anomaly_type.')
                 x_augs.append(x_aug)
-                x_aug_list.append(np.array(x_augs))
 
-            emb = EmbNormalizer()
-            z_aug = model(torch.tensor(np.concatenate(x_aug_list, axis=0)).float().unsqueeze(1).to(0)).detach()
-            z_train_t, z_valid_t, _ = emb(z_train[train_inlier_index].clone().squeeze(),
-                                          z_valid[valid_inlier_index].clone().squeeze(), z_aug)
+        emb = EmbNormalizer()
+        z_aug = model(torch.tensor(np.array(x_augs)).float().unsqueeze(1).to(0)).detach()
+        z_train_t, z_valid_t, _ = emb(z_train[train_inlier_index].clone().squeeze(),
+                                      z_valid[valid_inlier_index].clone().squeeze(), z_aug)
 
-            # def argument(x_np, outlier_index):
-            #     z_augs_dict, labels_dict = dict(), dict()
-            #     x_augs, labels = dict(), dict()
-            #     for anomaly_type in anomaly_types:
-            #         x_augs[anomaly_type] = dict()
-            #         labels[anomaly_type] = dict()
-            #
-            #         def arg(level, length):
-            #             if anomaly_type != 'spike':
-            #                 x_augs[anomaly_type][(round(level, 1), round(length, 1))] = list()
-            #                 labels[anomaly_type][(round(level, 1), round(length, 1))] = list()
-            #             else:
-            #                 x_augs[anomaly_type][(level, round(length, 2))] = list()
-            #                 labels[anomaly_type][(level, round(length, 2))] = list()
-            #             for i in outlier_index:
-            #                 if anomaly_type != 'spike':
-            #                     x_aug, label = inject(anomaly_type=anomaly_type, ts=x_np[i],
-            #                                           config=[level, np.random.uniform(0, 0.5), length])
-            #                     x_augs[anomaly_type][(round(level, 1), round(length, 1))].append(np.array(x_aug))
-            #                     labels[anomaly_type][(round(level, 1), round(length, 1))].append(np.array(label))
-            #                 else:
-            #                     x_aug, label = inject(anomaly_type=anomaly_type, ts=x_np[i], config=[level, length])
-            #                     x_augs[anomaly_type][(level, round(length, 2))].append(np.array(x_aug))
-            #                     labels[anomaly_type][(level, round(length, 2))].append(np.array(label))
-            #
-            #         if anomaly_type != 'spike':
-            #             for level in np.arange(min_level, max_level, level_step):
-            #                 for length in np.arange(min_length, max_length, length_step):
-            #                     arg(level=level, length=length)
-            #                     x_augs[anomaly_type][(round(level, 1), round(length, 1))] = np.array(
-            #                         x_augs[anomaly_type][(round(level, 1), round(length, 1))])
-            #                     x_augs[anomaly_type][(round(level, 1), round(length, 1))] = torch.tensor(
-            #                         x_augs[anomaly_type][(round(level, 1), round(length, 1))]).float().unsqueeze(
-            #                         1).to(
-            #                         args.device)
-            #                     x_augs[anomaly_type][(round(level, 1), round(length, 1))] = model(
-            #                         x_augs[anomaly_type][(round(level, 1), round(length, 1))]).detach()
-            #         else:
-            #             for level in np.arange(min_spike_level, max_spike_level, spike_level_step):
-            #                 for p in np.arange(min_spike_p, max_spike_p, spike_p_step):
-            #                     arg(level=level, length=p)
-            #                     x_augs[anomaly_type][(level, round(p, 2))] = np.array(
-            #                         x_augs[anomaly_type][(level, round(p, 2))])
-            #                     x_augs[anomaly_type][(level, round(p, 2))] = torch.tensor(
-            #                         x_augs[anomaly_type][(level, round(p, 2))]).float().unsqueeze(1).to(args.device)
-            #                     x_augs[anomaly_type][(level, round(p, 2))] = model(
-            #                         x_augs[anomaly_type][(level, round(p, 2))]).detach()
-            #
-            #     combinations = list(itertools.product(*[x_augs[anomaly_type] for anomaly_type in anomaly_types]))
-            #     for combination in combinations:
-            #         data = (list(), list())
-            #         for anomaly_type, ac in zip(anomaly_types, combination):
-            #             data[0].append(x_augs[anomaly_type][ac])
-            #             data[1].append(labels[anomaly_type][ac])
-            #         z_augs_dict[combination] = torch.cat(data[0], dim=0)
-            #         labels_dict[combination] = np.concatenate(data[1], axis=0)
-            #     return z_augs_dict, labels_dict
-            #
-            # z_train_aug, train_labels = argument(x_np=x_train_np, outlier_index=train_outlier_index)
-            # z_valid_aug, valid_labels = argument(x_np=x_valid_np, outlier_index=valid_outlier_index)
-            #
-            # z_train_aug_t = {config: emb.normalize(z_aug) for config, z_aug in z_train_aug.items()}
-            # z_valid_aug_t = {config: emb.normalize(z_aug) for config, z_aug in z_valid_aug.items()}
+        # def argument(x_np, outlier_index):
+        #     z_augs_dict, labels_dict = dict(), dict()
+        #     x_augs, labels = dict(), dict()
+        #     for anomaly_type in anomaly_types:
+        #         x_augs[anomaly_type] = dict()
+        #         labels[anomaly_type] = dict()
+        #
+        #         def arg(level, length):
+        #             if anomaly_type != 'spike':
+        #                 x_augs[anomaly_type][(round(level, 1), round(length, 1))] = list()
+        #                 labels[anomaly_type][(round(level, 1), round(length, 1))] = list()
+        #             else:
+        #                 x_augs[anomaly_type][(level, round(length, 2))] = list()
+        #                 labels[anomaly_type][(level, round(length, 2))] = list()
+        #             for i in outlier_index:
+        #                 if anomaly_type != 'spike':
+        #                     x_aug, label = inject(anomaly_type=anomaly_type, ts=x_np[i],
+        #                                           config=[level, np.random.uniform(0, 0.5), length])
+        #                     x_augs[anomaly_type][(round(level, 1), round(length, 1))].append(np.array(x_aug))
+        #                     labels[anomaly_type][(round(level, 1), round(length, 1))].append(np.array(label))
+        #                 else:
+        #                     x_aug, label = inject(anomaly_type=anomaly_type, ts=x_np[i], config=[level, length])
+        #                     x_augs[anomaly_type][(level, round(length, 2))].append(np.array(x_aug))
+        #                     labels[anomaly_type][(level, round(length, 2))].append(np.array(label))
+        #
+        #         if anomaly_type != 'spike':
+        #             for level in np.arange(min_level, max_level, level_step):
+        #                 for length in np.arange(min_length, max_length, length_step):
+        #                     arg(level=level, length=length)
+        #                     x_augs[anomaly_type][(round(level, 1), round(length, 1))] = np.array(
+        #                         x_augs[anomaly_type][(round(level, 1), round(length, 1))])
+        #                     x_augs[anomaly_type][(round(level, 1), round(length, 1))] = torch.tensor(
+        #                         x_augs[anomaly_type][(round(level, 1), round(length, 1))]).float().unsqueeze(
+        #                         1).to(
+        #                         args.device)
+        #                     x_augs[anomaly_type][(round(level, 1), round(length, 1))] = model(
+        #                         x_augs[anomaly_type][(round(level, 1), round(length, 1))]).detach()
+        #         else:
+        #             for level in np.arange(min_spike_level, max_spike_level, spike_level_step):
+        #                 for p in np.arange(min_spike_p, max_spike_p, spike_p_step):
+        #                     arg(level=level, length=p)
+        #                     x_augs[anomaly_type][(level, round(p, 2))] = np.array(
+        #                         x_augs[anomaly_type][(level, round(p, 2))])
+        #                     x_augs[anomaly_type][(level, round(p, 2))] = torch.tensor(
+        #                         x_augs[anomaly_type][(level, round(p, 2))]).float().unsqueeze(1).to(args.device)
+        #                     x_augs[anomaly_type][(level, round(p, 2))] = model(
+        #                         x_augs[anomaly_type][(level, round(p, 2))]).detach()
+        #
+        #     combinations = list(itertools.product(*[x_augs[anomaly_type] for anomaly_type in anomaly_types]))
+        #     for combination in combinations:
+        #         data = (list(), list())
+        #         for anomaly_type, ac in zip(anomaly_types, combination):
+        #             data[0].append(x_augs[anomaly_type][ac])
+        #             data[1].append(labels[anomaly_type][ac])
+        #         z_augs_dict[combination] = torch.cat(data[0], dim=0)
+        #         labels_dict[combination] = np.concatenate(data[1], axis=0)
+        #     return z_augs_dict, labels_dict
+        #
+        # z_train_aug, train_labels = argument(x_np=x_train_np, outlier_index=train_outlier_index)
+        # z_valid_aug, valid_labels = argument(x_np=x_valid_np, outlier_index=valid_outlier_index)
+        #
+        # z_train_aug_t = {config: emb.normalize(z_aug) for config, z_aug in z_train_aug.items()}
+        # z_valid_aug_t = {config: emb.normalize(z_aug) for config, z_aug in z_valid_aug.items()}
+        # total_loss = dict()
+        # f1score = dict()
+        # W_loss = SamplesLoss("sinkhorn", p=2, blur=0.05, scaling=0.9)
+        # for train_config, z_train_config_aug_t in z_train_aug_t.items():
+        #     total_loss[train_config] = dict()
+        #     f1score[train_config] = dict()
+        #
+        #     classify_model = None
+        #     for valid_config, z_valid_config_aug_t in z_valid_aug_t.items():
+        #         total_loss[train_config][valid_config] = W_loss(z_train_config_aug_t, z_valid_config_aug_t).item()
+        #         if classify_model is None:
+        #             X = torch.cat([z_train_t, z_train_config_aug_t], dim=0)
+        #             y = torch.tensor(np.concatenate([np.zeros((len(train_inlier_index), x_train_np.shape[1])),
+        #                                              train_labels[train_config]], axis=0)).to(args.device)
+        #             classify_model = train_classify_model(args=args, X_train=X, y_train=y)
+        #
+        #         y_pred = classify(model=classify_model, X_valid=z_valid_config_aug_t)
+        #         f1score[train_config][valid_config] = f1_score(torch.tensor(valid_labels[valid_config]).
+        #                                                        reshape(-1), y_pred.reshape(-1))
+        #         print(f'train: {train_config}, valid: {valid_config}, '
+        #               f'wd: {total_loss[train_config][valid_config]}, '
+        #               f'f1score: {f1score[train_config][valid_config]}')
+        #
+        # inlier = {'train': z_train_t, 'valid': z_valid_t}
+        # outlier = {'train': z_train_aug_t, 'valid': z_valid_aug_t}
+        # combinations = list(z_train_aug_t.keys())
+        # visualize_multiple(inlier=inlier, outlier=outlier, combinations=combinations, trail=args.trail)
 
-            x_train_augs_dict, train_labels_dict = dict(), dict()
-            for anomaly_type in anomaly_types:
-                x_train_augs, train_labels = list(), list()
-                for i in train_outlier_index:
-                    x = x_train_np[i]
-                    x_augs, labels = list(), list()
-
+        def argument(x_np, outlier_index):
+            x_augs_dict, labels_dict = dict(), dict()
+            for index, anomaly_type in enumerate(anomaly_types):
+                x_augs_dict[anomaly_type] = dict()
+                labels_dict[anomaly_type] = dict()
+                for i in outlier_index[index * (len(outlier_index) // len(anomaly_types)):(index + 1) * (len(
+                        outlier_index) // len(anomaly_types))]:
+                    x = x_np[i]
                     if anomaly_type == 'platform':
-                        for level in np.arange(min_platform_level, max_platform_level, platform_level_step):
-                            x_augs, labels = list(), list()
+                        if x_augs_dict[anomaly_type].get('level') is None:
+                            x_augs_dict[anomaly_type]['level'] = dict()
+                            labels_dict[anomaly_type]['level'] = dict()
+                            x_augs_dict[anomaly_type]['length'] = dict()
+                            labels_dict[anomaly_type]['length'] = dict()
+                        for level in np.round(np.arange(min_platform_level, max_platform_level, platform_level_step),
+                                              1):
+                            if x_augs_dict[anomaly_type]['level'].get(level) is None:
+                                x_augs_dict[anomaly_type]['level'][level] = list()
+                                labels_dict[anomaly_type]['level'][level] = list()
                             x_aug, label = inject_platform(x, level, np.random.uniform(0, 0.5), fixed_platform_length)
-                            x_augs.append(x_aug)
-                            labels.append(label)
-                        for length in np.arange(min_platform_length, max_platform_length, platform_length_step):
-                            x_augs, labels = list(), list()
+                            x_augs_dict[anomaly_type]['level'][level].append(x_aug)
+                            labels_dict[anomaly_type]['level'][level].append(label)
+                        for length in np.round(
+                                np.arange(min_platform_length, max_platform_length, platform_length_step), 2):
+                            if x_augs_dict[anomaly_type]['length'].get(length) is None:
+                                x_augs_dict[anomaly_type]['length'][length] = list()
+                                labels_dict[anomaly_type]['length'][length] = list()
                             x_aug, label = inject_mean(x, fixed_mean_level, np.random.uniform(0, 0.5), length)
-                            x_augs.append(x_aug)
-                            labels.append(label)
+                            x_augs_dict[anomaly_type]['length'][length].append(x_aug)
+                            labels_dict[anomaly_type]['length'][length].append(label)
                     elif anomaly_type == 'mean':
-                        for level in np.arange(min_mean_level, max_mean_level, mean_level_step):
-                            x_augs, labels = list(), list()
+                        if x_augs_dict[anomaly_type].get('level') is None:
+                            x_augs_dict[anomaly_type]['level'] = dict()
+                            labels_dict[anomaly_type]['level'] = dict()
+                            x_augs_dict[anomaly_type]['length'] = dict()
+                            labels_dict[anomaly_type]['length'] = dict()
+                        for level in np.round(np.arange(min_mean_level, max_mean_level, mean_level_step), 1):
+                            if level == 0:
+                                continue
+                            if x_augs_dict[anomaly_type]['level'].get(level) is None:
+                                x_augs_dict[anomaly_type]['level'][level] = list()
+                                labels_dict[anomaly_type]['level'][level] = list()
                             x_aug, label = inject_mean(x, level, np.random.uniform(0, 0.5), fixed_mean_length)
-                            x_augs.append(x_aug)
-                            labels.append(label)
-                        for length in np.arange(min_mean_length, max_mean_length, mean_length_step):
-                            x_augs, labels = list(), list()
+                            x_augs_dict[anomaly_type]['level'][level].append(x_aug)
+                            labels_dict[anomaly_type]['level'][level].append(label)
+                        for length in np.round(np.arange(min_mean_length, max_mean_length, mean_length_step), 2):
+                            if x_augs_dict[anomaly_type]['length'].get(length) is None:
+                                x_augs_dict[anomaly_type]['length'][length] = list()
+                                labels_dict[anomaly_type]['length'][length] = list()
                             x_aug, label = inject_mean(x, fixed_mean_level, np.random.uniform(0, 0.5), length)
-                            x_augs.append(x_aug)
-                            labels.append(label)
+                            x_augs_dict[anomaly_type]['length'][length].append(x_aug)
+                            labels_dict[anomaly_type]['length'][length].append(label)
                     elif anomaly_type == 'spike':
-                        for level in np.arange(min_spike_level, max_spike_level, spike_level_step):
+                        if x_augs_dict[anomaly_type].get('level') is None:
+                            x_augs_dict[anomaly_type]['level'] = dict()
+                            labels_dict[anomaly_type]['level'] = dict()
+                            x_augs_dict[anomaly_type]['p'] = dict()
+                            labels_dict[anomaly_type]['p'] = dict()
+                        for level in np.round(np.arange(min_spike_level, max_spike_level, spike_level_step), 1):
+                            if x_augs_dict[anomaly_type]['level'].get(level) is None:
+                                x_augs_dict[anomaly_type]['level'][level] = list()
+                                labels_dict[anomaly_type]['level'][level] = list()
                             x_aug, label = inject_spike(x, level, fixed_spike_p)
-                            x_augs.append(x_aug)
-                            labels.append(label)
-                        for p in np.arange(min_spike_p, max_spike_p, spike_p_step):
+                            x_augs_dict[anomaly_type]['level'][level].append(x_aug)
+                            labels_dict[anomaly_type]['level'][level].append(label)
+                        for p in np.round(np.arange(min_spike_p, max_spike_p, spike_p_step), 2):
+                            if x_augs_dict[anomaly_type]['p'].get(p) is None:
+                                x_augs_dict[anomaly_type]['p'][p] = list()
+                                labels_dict[anomaly_type]['p'][p] = list()
                             x_aug, label = inject_spike(x, fixed_spike_level, p)
-                            x_augs.append(x_aug)
-                            labels.append(label)
+                            x_augs_dict[anomaly_type]['p'][p].append(x_aug)
+                            labels_dict[anomaly_type]['p'][p].append(label)
+                    elif anomaly_type == 'amplitude':
+                        if x_augs_dict[anomaly_type].get('level') is None:
+                            x_augs_dict[anomaly_type]['level'] = dict()
+                            labels_dict[anomaly_type]['level'] = dict()
+                            x_augs_dict[anomaly_type]['length'] = dict()
+                            labels_dict[anomaly_type]['length'] = dict()
+                        for level in np.round(
+                                np.arange(min_amplitude_level[0], max_amplitude_level[0], amplitude_level_step[0]), 1):
+                            if x_augs_dict[anomaly_type]['level'].get(level) is None:
+                                x_augs_dict[anomaly_type]['level'][level] = list()
+                                labels_dict[anomaly_type]['level'][level] = list()
+                            x_aug, label = inject_amplitude(x, level, np.random.uniform(0, 0.5), fixed_amplitude_length)
+                            x_augs_dict[anomaly_type]['level'][level].append(x_aug)
+                            labels_dict[anomaly_type]['level'][level].append(label)
+                        for level in np.arange(min_amplitude_level[1], max_amplitude_level[1], amplitude_level_step[1]):
+                            if x_augs_dict[anomaly_type]['level'].get(level) is None:
+                                x_augs_dict[anomaly_type]['level'][level] = list()
+                                labels_dict[anomaly_type]['level'][level] = list()
+                            x_aug, label = inject_amplitude(x, level, np.random.uniform(0, 0.5), fixed_amplitude_length)
+                            x_augs_dict[anomaly_type]['level'][level].append(x_aug)
+                            labels_dict[anomaly_type]['level'][level].append(label)
+                        for length in np.round(
+                                np.arange(min_amplitude_length, max_amplitude_length, amplitude_length_step), 2):
+                            if x_augs_dict[anomaly_type]['length'].get(length) is None:
+                                x_augs_dict[anomaly_type]['length'][length] = list()
+                                labels_dict[anomaly_type]['length'][length] = list()
+                            x_aug, label = inject_amplitude(x, fixed_amplitude_level[1], np.random.uniform(0, 0.5),
+                                                            length)
+                            x_augs_dict[anomaly_type]['length'][length].append(x_aug)
+                            labels_dict[anomaly_type]['length'][length].append(label)
+                    elif anomaly_type == 'trend':
+                        if x_augs_dict[anomaly_type].get('slope') is None:
+                            x_augs_dict[anomaly_type]['slope'] = dict()
+                            labels_dict[anomaly_type]['slope'] = dict()
+                            x_augs_dict[anomaly_type]['length'] = dict()
+                            labels_dict[anomaly_type]['length'] = dict()
+                        for slope in np.round(np.arange(min_trend_slope[0], max_trend_slope[0], trend_slope_step), 3):
+                            if x_augs_dict[anomaly_type]['slope'].get(slope) is None:
+                                x_augs_dict[anomaly_type]['slope'][slope] = list()
+                                labels_dict[anomaly_type]['slope'][slope] = list()
+                            x_aug, label = inject_trend(x, slope, np.random.uniform(0, 0.5), fixed_trend_length)
+                            x_augs_dict[anomaly_type]['slope'][slope].append(x_aug)
+                            labels_dict[anomaly_type]['slope'][slope].append(label)
+                        for slope in np.round(np.arange(min_trend_slope[1], max_trend_slope[1], trend_slope_step), 3):
+                            if x_augs_dict[anomaly_type]['slope'].get(slope) is None:
+                                x_augs_dict[anomaly_type]['slope'][slope] = list()
+                                labels_dict[anomaly_type]['slope'][slope] = list()
+                            x_aug, label = inject_trend(x, slope, np.random.uniform(0, 0.5), fixed_trend_length)
+                            x_augs_dict[anomaly_type]['slope'][slope].append(x_aug)
+                            labels_dict[anomaly_type]['slope'][slope].append(label)
+                        for length in np.round(np.arange(min_trend_length, max_trend_length, trend_length_step), 2):
+                            if x_augs_dict[anomaly_type]['length'].get(length) is None:
+                                x_augs_dict[anomaly_type]['length'][length] = list()
+                                labels_dict[anomaly_type]['length'][length] = list()
+                            x_aug, label = inject_trend(x, fixed_trend_slope, np.random.uniform(0, 0.5), length)
+                            x_augs_dict[anomaly_type]['length'][length].append(x_aug)
+                            labels_dict[anomaly_type]['length'][length].append(label)
+                    elif anomaly_type == 'variance':
+                        if x_augs_dict[anomaly_type].get('level') is None:
+                            x_augs_dict[anomaly_type]['level'] = dict()
+                            labels_dict[anomaly_type]['level'] = dict()
+                            x_augs_dict[anomaly_type]['length'] = dict()
+                            labels_dict[anomaly_type]['length'] = dict()
+                        for level in np.round(np.arange(min_variance_level, max_variance_level, variance_level_step),
+                                              2):
+                            if x_augs_dict[anomaly_type]['level'].get(level) is None:
+                                x_augs_dict[anomaly_type]['level'][level] = list()
+                                labels_dict[anomaly_type]['level'][level] = list()
+                            x_aug, label = inject_variance(x, level, np.random.uniform(0, 0.5), fixed_variance_length)
+                            x_augs_dict[anomaly_type]['level'][level].append(x_aug)
+                            labels_dict[anomaly_type]['level'][level].append(label)
+                        for length in np.round(
+                                np.arange(min_variance_length, max_variance_length, variance_length_step), 2):
+                            if x_augs_dict[anomaly_type]['length'].get(length) is None:
+                                x_augs_dict[anomaly_type]['length'][length] = list()
+                                labels_dict[anomaly_type]['length'][length] = list()
+                            x_aug, label = inject_variance(x, fixed_spike_level, np.random.uniform(0, 0.5), length)
+                            x_augs_dict[anomaly_type]['length'][length].append(x_aug)
+                            labels_dict[anomaly_type]['length'][length].append(label)
+                    else:
+                        raise Exception(f'Unsupported anomaly_type {anomaly_type}')
+            return x_augs_dict, labels_dict
+
+        x_train_aug, train_labels = argument(x_np=x_train_np, outlier_index=train_outlier_index)
+        # x_valid_aug, valid_labels = argument(x_np=x_valid_np, outlier_index=valid_outlier_index)
+
+        z_train_aug = {
+            anomaly_type: {
+                config: {c: model(torch.tensor(np.array(x_aug)).float().unsqueeze(1).to(args.device)).detach()
+                         for c, x_aug in x_augs.items()}
+                for config, x_augs in x_train_aug[anomaly_type].items()}
+            for anomaly_type in anomaly_types}
+        # z_valid_aug = {
+        # anomaly_type: {
+        #     config: {c: model(torch.tensor(np.array(x_aug)).float().unsqueeze(1).to(args.device)).detach()
+        #              for c, x_aug in x_augs.items()}
+        #     for config, x_augs in x_valid_aug[anomaly_type].items()}
+        # for anomaly_type in anomaly_types}
+
+        z_train_aug_t = {anomaly_type: {config: {c: emb.normalize(z_aug) for c, z_aug in z_augs.items()}
+                                        for config, z_augs in z_train_aug[anomaly_type].items()}
+                         for anomaly_type in anomaly_types}
+        # z_valid_aug_t = {anomaly_type: {config: {c: emb.normalize(z_aug) for c, z_aug in z_augs.items()}
+        #                                 for config, z_augs in z_valid_aug[anomaly_type].items()}
+        #                  for anomaly_type in anomaly_types}
+
+        # total_loss, f1score = dict(), dict()
+        # W_loss = SamplesLoss("sinkhorn", p=2, blur=0.05, scaling=0.9)
+        # for anomaly_type in anomaly_types:
+        #     total_loss[anomaly_type] = dict()
+        #     f1score[anomaly_type] = dict()
+        #     for config in z_train_aug_t[anomaly_type].keys():
+        #         # total_loss[anomaly_type][config] = dict()
+        #         # f1score[anomaly_type][config] = dict()
+        #         # for train_config in z_train_aug_t[anomaly_type][config].keys():
+        #             # X = torch.cat([z_train_t, z_train_aug_t[anomaly_type][config][train_config]], dim=0).to(
+        #             #     args.device)
+        #             # y = torch.tensor(np.concatenate([
+        #             #     np.zeros((len(train_inlier_index), x_train_np.shape[1])),
+        #             #     train_labels[anomaly_type][config][train_config]], axis=0)).to(args.device)
+        #             # classify_model = None
+        #             # total_loss[anomaly_type][config][train_config] = dict()
+        #             # f1score[anomaly_type][config][train_config] = dict()
+        #             # for valid_config in z_train_aug_t[anomaly_type][config].keys():
+        #             #     total_loss[anomaly_type][config][train_config][valid_config] = W_loss(
+        #             #         z_train_aug_t[anomaly_type][config][train_config],
+        #             #         z_valid_aug_t[anomaly_type][config][valid_config]).item()
+        #             #     if classify_model == None:
+        #             #         classify_model = train_classify_model(args=args, X_train=X, y_train=y)
+        #             #     y_pred = classify(model=classify_model,
+        #             #                       X_valid=z_valid_aug_t[anomaly_type][config][valid_config].detach())
+        #             #     f1score[anomaly_type][config][train_config][valid_config] = f1_score(
+        #             #         torch.tensor(np.array(valid_labels[anomaly_type][config][valid_config])).reshape(-1),
+        #             #         y_pred.reshape(-1))
+        #             #     print(f'{anomaly_type}, {train_config}, {valid_config}, '
+        #             #           f'{total_loss[anomaly_type][config][train_config][valid_config]}, '
+        #             #           f'{f1score[anomaly_type][config][train_config][valid_config]}')
+        #         visualize_anomaly(z_train, z_valid, z_train_aug[anomaly_type][config],
+        #                           z_valid_aug[anomaly_type][config], config, args.trail, anomaly_type)
+
+        X = torch.cat(
+            [z_train_t, torch.cat(
+                [torch.cat([torch.cat([z_aug_t for z_aug_t in z_augs_t.values()], dim=0) for z_augs_t in
+                            z_train_aug_t[anomaly_type].values()], dim=0) for anomaly_type in
+                 anomaly_types], dim=0)], dim=0).detach()
+        y = torch.tensor(np.concatenate([np.zeros((len(train_inlier_index), x_train_np.shape[1])), np.concatenate(
+            [np.concatenate([np.concatenate([label for label in labels.values()], axis=0) for labels in
+                             train_labels[anomaly_type].values()], axis=0) for anomaly_type in anomaly_types], axis=0)],
+                                        axis=0)).to(args.device)
+        classify_model = train_classify_model(args=args, X_train=X, y_train=y)
+        valid_anomaly_types_list = [['platform', 'mean', 'spike'],
+                                    ['amplitude', 'trend', 'variance'],
+                                    ['platform', 'mean', 'spike', 'amplitude', 'trend', 'variance']]
+        valid_point_list = [{'platform_level': 0.5, 'platform_length': 0.3, 'mean_level': 0.5, 'mean_length': 0.3,
+                             'spike_level': 15, 'spike_p': 0.03},
+                            {'amplitude_level': 0.5, 'amplitude_length': 0.3,
+                             'trend_slope': 0.01, 'trend_length': 0.3, 'variance_level': 0.01, 'variance_length': 0.3},
+                            {'platform_level': 0.5, 'platform_length': 0.3, 'mean_level': 0.5, 'mean_length': 0.3,
+                             'spike_level': 15, 'spike_p': 0.03, 'amplitude_level': 0.5, 'amplitude_length': 0.3,
+                             'trend_slope': 0.01, 'trend_length': 0.3, 'variance_level': 0.01, 'variance_length': 0.3}]
+        x_valid_augs_list, valid_labels_list = list(), list()
+        for index, valid_anomaly_types in enumerate(valid_anomaly_types_list):
+            x_valid_augs, valid_labels = list(), list()
+            for start_idx, anomaly_type in enumerate(valid_anomaly_types):
+                x_augs, labels = list(), list()
+                for i in valid_outlier_index[
+                         start_idx * (len(valid_outlier_index) // len(valid_anomaly_types)):(start_idx + 1) * (len(
+                             valid_outlier_index) // len(valid_anomaly_types))]:
+                    if anomaly_type == 'platform':
+                        x_aug, label = inject_platform(x_valid_np[i], valid_point_list[index]['platform_level'],
+                                                       np.random.uniform(0, 0.5),
+                                                       valid_point_list[index]['platform_length'])
+                    elif anomaly_type == 'mean':
+                        x_aug, label = inject_mean(x_valid_np[i], valid_point_list[index]['mean_level'],
+                                                   np.random.uniform(0, 0.5),
+                                                   valid_point_list[index]['mean_length'])
+                    elif anomaly_type == 'spike':
+                        x_aug, label = inject_spike(x_valid_np[i], valid_point_list[index]['spike_level'],
+                                                    valid_point_list[index]['spike_p'])
+                    elif anomaly_type == 'amplitude':
+                        x_aug, label = inject_amplitude(x_valid_np[i], valid_point_list[index]['amplitude_level'],
+                                                        np.random.uniform(0, 0.5),
+                                                        valid_point_list[index]['amplitude_length'])
+                    elif anomaly_type == 'trend':
+                        x_aug, label = inject_trend(x_valid_np[i], valid_point_list[index]['trend_slope'],
+                                                    np.random.uniform(0, 0.5),
+                                                    valid_point_list[index]['trend_length'])
+                    elif anomaly_type == 'variance':
+                        x_aug, label = inject_variance(x_valid_np[i], valid_point_list[index]['variance_level'],
+                                                       np.random.uniform(0, 0.5),
+                                                       valid_point_list[index]['variance_length'])
                     else:
                         raise Exception('Unsupported anomaly_type.')
-                    x_train_augs.append(x_augs)
-                    train_labels.append(labels)
-                x_train_augs_dict[anomaly_type] = x_train_augs
-                train_labels_dict[anomaly_type] = train_labels
-            z_train_aug = {anomaly_type: [
-                model(torch.tensor(np.array(x_aug)).float().unsqueeze(1).to(args.device)).detach() for
-                x_aug in x_train_augs_dict[anomaly_type]] for anomaly_type in anomaly_types}
-            z_aug_train_t = {anomaly_type: [emb.normalize(z_aug) for z_aug in z_train_aug[anomaly_type]] for
-                             anomaly_type in anomaly_types}
-
-            X = torch.cat(
-                [z_train_t, torch.cat([torch.cat(z_aug_t, dim=0) for z_aug_t in z_aug_train_t.values()], dim=0)],
-                dim=0).detach()
-            y = torch.tensor(np.concatenate(
-                [np.zeros((len(train_inlier_index), x_train_np.shape[1])),
-                 np.concatenate([np.concatenate(train_labels, axis=0) for train_labels in train_labels_dict.values()],
-                                axis=0)], axis=0)).to(args.device)
-            classify_model = train_classify_model(args=args, X_train=X, y_train=y)
-            valid_anomaly_types_list = [['platform', 'mean'], ['platform', 'spike'], ['mean', 'spike'],
-                                        ['platform', 'mean', 'spike']]
-            valid_point_list = [{'platform_level': 0.5, 'platform_length': 0.3, 'mean_level': 0.5, 'mean_length': 0.3},
-                                {'platform_level': 0.5, 'platform_length': 0.3, 'mean_level': 0.5, 'mean_length': 0.3,
-                                 'spike_level': 15, 'spike_p': 0.03},
-                                {'platform_level': 0.5, 'platform_length': 0.3, 'mean_level': 0.5, 'mean_length': 0.3,
-                                 'spike_level': 15, 'spike_p': 0.03},
-                                {'platform_level': 0.5, 'platform_length': 0.3, 'mean_level': 0.5, 'mean_length': 0.3,
-                                 'spike_level': 15, 'spike_p': 0.03}]
-            x_valid_augs_list, valid_labels_list = list(), list()
-            for index, valid_anomaly_types in enumerate(valid_anomaly_types_list):
-                x_valid_augs, valid_labels = list(), list()
-                for anomaly_type in valid_anomaly_types:
-                    x_augs, labels = list(), list()
-                    for i in valid_outlier_index:
-                        if anomaly_type == 'platform':
-                            x_aug, label = inject_platform(x_valid_np[i], valid_point_list[index]['platform_level'],
-                                                           np.random.uniform(0, 0.5),
-                                                           valid_point_list[index]['platform_length'])
-                        elif anomaly_type == 'mean':
-                            x_aug, label = inject_mean(x_valid_np[i], valid_point_list[index]['mean_level'],
-                                                       np.random.uniform(0, 0.5),
-                                                       valid_point_list[index]['mean_length'])
-                        elif anomaly_type == 'spike':
-                            x_aug, label = inject_spike(x_valid_np[i], valid_point_list[index]['spike_level'],
-                                                        valid_point_list[index]['spike_p'])
-                        else:
-                            raise Exception('Unsupported anomaly_type.')
-                        x_augs.append(x_aug)
-                        labels.append(label)
-                    x_valid_augs.append(x_augs)
-                    valid_labels.append(labels)
-                x_valid_augs_list.append(x_valid_augs)
-                valid_labels_list.append(valid_labels)
-            z_valid_augs = [
-                model(torch.tensor(np.concatenate(x_augs, axis=0)).float().unsqueeze(1).to(args.device)).detach()
-                for x_augs in x_valid_augs_list]
-            valid_labels = [(np.concatenate(labels, axis=0)) for labels in valid_labels_list]
-            z_valid_augs_t = [emb.normalize(z_aug) for z_aug in z_valid_augs]
-            total_loss = list()
-            f1score = list()
-            W_loss = SamplesLoss("sinkhorn", p=2, blur=0.05, scaling=0.9)
-            for i, z_valid_aug_t in enumerate(z_valid_augs_t):
-                total_loss.append(
-                    W_loss(torch.cat([torch.cat(z_aug_t, dim=0) for z_aug_t in z_aug_train_t.values()], dim=0),
-                           z_valid_aug_t).item())
-                y_pred = classify(model=classify_model, X_valid=z_valid_aug_t)
-                f1score.append(f1_score(torch.tensor(valid_labels[i]).reshape(-1), y_pred.reshape(-1)))
-                print(f'wd: {total_loss[i]}, f1score: {f1score[i]}')
-
-            # total_loss = dict()
-            # f1score = dict()
-            # W_loss = SamplesLoss("sinkhorn", p=2, blur=0.05, scaling=0.9)
-            # for train_config, z_train_config_aug_t in z_train_aug_t.items():
-            #     total_loss[train_config] = dict()
-            #     f1score[train_config] = dict()
-            #
-            #     classify_model = None
-            #     for valid_config, z_valid_config_aug_t in z_valid_aug_t.items():
-            #         total_loss[train_config][valid_config] = W_loss(z_train_config_aug_t, z_valid_config_aug_t).item()
-            #         if classify_model is None:
-            #             X = torch.cat([z_train_t, z_train_config_aug_t], dim=0)
-            #             y = torch.tensor(np.concatenate([np.zeros((len(train_inlier_index), x_train_np.shape[1])),
-            #                                              train_labels[train_config]], axis=0)).to(args.device)
-            #             classify_model = train_classify_model(args=args, X_train=X, y_train=y)
-            #
-            #         y_pred = classify(model=classify_model, X_valid=z_valid_config_aug_t)
-            #         f1score[train_config][valid_config] = f1_score(torch.tensor(valid_labels[valid_config]).
-            #                                                        reshape(-1), y_pred.reshape(-1))
-            #         print(f'train: {train_config}, valid: {valid_config}, '
-            #               f'wd: {total_loss[train_config][valid_config]}, '
-            #               f'f1score: {f1score[train_config][valid_config]}')
-            #
-            # inlier = {'train': z_train_t, 'valid': z_valid_t}
-            # outlier = {'train': z_train_aug_t, 'valid': z_valid_aug_t}
-            # combinations = list(z_train_aug_t.keys())
-            # visualize_multiple(inlier=inlier, outlier=outlier, combinations=combinations, trail=args.trail)
-            return total_loss, f1score
+                    x_augs.append(x_aug)
+                    labels.append(label)
+                x_valid_augs.append(x_augs)
+                valid_labels.append(labels)
+            x_valid_augs_list.append(x_valid_augs)
+            valid_labels_list.append(valid_labels)
+        z_valid_augs = [
+            model(torch.tensor(np.concatenate(x_augs, axis=0)).float().unsqueeze(1).to(args.device)).detach()
+            for x_augs in x_valid_augs_list]
+        valid_labels = [(np.concatenate(labels, axis=0)) for labels in valid_labels_list]
+        z_valid_augs_t = [emb.normalize(z_aug) for z_aug in z_valid_augs]
+        total_loss = list()
+        f1score = list()
+        W_loss = SamplesLoss("sinkhorn", p=2, blur=0.05, scaling=0.9)
+        for i, z_valid_aug_t in enumerate(z_valid_augs_t):
+            total_loss.append(W_loss(
+                torch.cat([torch.cat([torch.cat([z_aug_t[:len(z_aug_t)//10] for z_aug_t in z_augs_t.values()], dim=0)
+                                      for z_augs_t in z_train_aug_t[anomaly_type].values()], dim=0)
+                           for anomaly_type in anomaly_types], dim=0), z_valid_aug_t).item())
+            y_pred = classify(model=classify_model, X_valid=z_valid_aug_t)
+            f1score.append(f1_score(torch.tensor(valid_labels[i]).reshape(-1), y_pred.reshape(-1)))
+            print(f'wd: {total_loss[i]}, f1score: {f1score[i]}')
+        return total_loss, f1score
     else:
         x_valid_aug, valid_labels = list(), list()
-        inlier_num = 0
-        for anomaly_type in anomaly_types:
-            if anomaly_type not in valid_anomaly_types:
-                for i in valid_outlier_index:
-                    x_valid_aug.append(x_valid_np[i])
-                    valid_labels.append(np.zeros(len(x_valid_np[i])))
-                    inlier_num += 1
-
-        for anomaly_type in anomaly_types:
-            if anomaly_type not in valid_anomaly_types:
-                continue
-            else:
-                for i in valid_outlier_index:
-                    if anomaly_type == 'platform':
-                        x_aug, l = inject_platform(x_valid_np[i], valid_point[anomaly_type]['level'],
-                                                   np.random.uniform(0, 0.5), valid_point[anomaly_type]['length'])
-                    elif anomaly_type == 'mean':
-                        x_aug, l = inject_mean(x_valid_np[i], valid_point[anomaly_type]['level'],
+        for anomaly_type in valid_anomaly_types:
+            for i in valid_outlier_index:
+                if anomaly_type == 'platform':
+                    x_aug, l = inject_platform(x_valid_np[i], valid_point[anomaly_type]['level'],
                                                np.random.uniform(0, 0.5), valid_point[anomaly_type]['length'])
-                    elif anomaly_type == 'spike':
-                        x_aug, l = inject_spike(x_valid_np[i], valid_point[anomaly_type]['level'],
-                                                valid_point[anomaly_type]['p'])
-                    elif anomaly_type == 'amplitude':
-                        x_aug, l = inject_amplitude(x_valid_np[i], valid_point[anomaly_type]['level'],
-                                                    np.random.uniform(0, 0.5), valid_point[anomaly_type]['length'])
-                    elif anomaly_type == 'trend':
-                        x_aug, l = inject_trend(x_valid_np[i], valid_point[anomaly_type]['slope'],
+                elif anomaly_type == 'mean':
+                    x_aug, l = inject_mean(x_valid_np[i], valid_point[anomaly_type]['level'],
+                                           np.random.uniform(0, 0.5), valid_point[anomaly_type]['length'])
+                elif anomaly_type == 'spike':
+                    x_aug, l = inject_spike(x_valid_np[i], valid_point[anomaly_type]['level'],
+                                            valid_point[anomaly_type]['p'])
+                elif anomaly_type == 'amplitude':
+                    x_aug, l = inject_amplitude(x_valid_np[i], valid_point[anomaly_type]['level'],
                                                 np.random.uniform(0, 0.5), valid_point[anomaly_type]['length'])
-                    elif anomaly_type == 'variance':
-                        x_aug, l = inject_variance(x_valid_np[i], valid_point[anomaly_type]['level'],
-                                                   np.random.uniform(0, 0.5), valid_point[anomaly_type]['length'])
-                    else:
-                        raise Exception('Unsupported anomaly_type.')
-                    x_valid_aug.append(x_aug)
-                    valid_labels.append(l)
+                elif anomaly_type == 'trend':
+                    x_aug, l = inject_trend(x_valid_np[i], valid_point[anomaly_type]['slope'],
+                                            np.random.uniform(0, 0.5), valid_point[anomaly_type]['length'])
+                elif anomaly_type == 'variance':
+                    x_aug, l = inject_variance(x_valid_np[i], valid_point[anomaly_type]['level'],
+                                               np.random.uniform(0, 0.5), valid_point[anomaly_type]['length'])
+                else:
+                    raise Exception(f'Unsupported anomaly_type {anomaly_type}.')
+                x_valid_aug.append(x_aug)
+                valid_labels.append(l)
 
         train_p = dict()
         for k, v in train_point.items():
@@ -498,8 +661,8 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
                 train_p[s[0]] = dict()
             train_p[s[0]][s[1]] = v
         x_train_aug, train_labels = list(), list()
-        for i in train_outlier_index:
-            for anomaly_type in anomaly_types:
+        for anomaly_type in anomaly_types:
+            for i in train_outlier_index:
                 if anomaly_type == 'platform':
                     x_aug, l = inject_platform(x_train_np[i], train_p[anomaly_type]['level'],
                                                np.random.uniform(0, 0.5), train_p[anomaly_type]['length'])
@@ -533,7 +696,6 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
         if best is False:
             W_loss = SamplesLoss("sinkhorn", p=2, blur=0.05, scaling=0.9)
             loss = W_loss(z_train_aug_t, z_valid_aug_t)
-
             X = torch.cat([z_train_t, z_train_aug_t.detach()], dim=0)
             y = torch.tensor(np.concatenate([np.zeros((len(train_inlier_index), x_train_np.shape[1])),
                                              train_labels], axis=0)).to(args.device)
@@ -723,6 +885,69 @@ def visualize_multiple(inlier, outlier, combinations, trail):
     plt.legend(handles=legend_elements, loc='center', ncol=num_columns, fontsize=8)
     plt.savefig(f'logs/training/{trail}/legend.pdf', bbox_inches='tight')
     plt.show()
+    plt.close()
+
+
+def visualize_anomaly(train_inlier, valid_inlier, train_augs, valid_augs, config_name, trail, anomaly_type):
+    train_aug = torch.cat(list(train_augs.values()), dim=0)
+    valid_aug = torch.cat(list(valid_augs.values()), dim=0)
+    aug = torch.cat([train_aug, valid_aug], dim=0)
+    all_data = torch.cat([train_inlier, valid_inlier, aug], dim=0).to('cpu').numpy()
+    start_idx = 0
+
+    xt = TSNE(n_components=2, random_state=42).fit_transform(all_data)
+    plt.figure(figsize=(8, 6))
+    plt.scatter(xt[:len(train_inlier), 0], xt[:len(train_inlier), 1], c='b', alpha=0.5)
+    start_idx += len(train_inlier)
+    plt.scatter(xt[start_idx:start_idx + len(valid_inlier), 0], xt[start_idx:start_idx + len(valid_inlier), 1], c='g',
+                alpha=0.5)
+    start_idx += len(valid_inlier)
+    legend_elements = list()
+    legend_elements.append(
+        Line2D([0], [0], marker='o', color='w', label='Train inliers', markerfacecolor='b', markersize=10))
+    legend_elements.append(
+        Line2D([0], [0], marker='o', color='w', label='Test inliers', markerfacecolor='g', markersize=10))
+
+    # train outliers
+    cmap = cm.get_cmap('Greys')
+    configs = np.array(list(train_augs.keys()))
+    normalized_values = (configs - np.min(configs)) / (np.max(configs) - np.min(configs))
+    normalized_values = normalized_values * (1 - 0.2) + 0.2
+    colors = [cmap(val) for val in normalized_values]
+    for i, value in enumerate(configs):
+        plt.scatter(xt[start_idx:start_idx + len(train_augs[value]), 0],
+                    xt[start_idx:start_idx + len(train_augs[value]), 1],
+                    c=[colors[i]] * (len(train_augs[value])), alpha=0.5)
+        start_idx += len(train_augs[value])
+        legend_elements.append(
+            Line2D([0], [0], marker='o', color='w', label=f'Train outliers ({config_name}={value})',
+                   markerfacecolor=colors[i], markersize=10))
+
+    # test outliers
+    cmap = cm.get_cmap('Reds')
+    colors = [cmap(val) for val in normalized_values]
+    for i, value in enumerate(configs):
+        plt.scatter(xt[start_idx:start_idx + len(valid_augs[value]), 0],
+                    xt[start_idx:start_idx + len(valid_augs[value]), 1],
+                    c=[colors[i]] * (len(valid_augs[value])), alpha=0.5)
+        start_idx += len(valid_augs[value])
+        legend_elements.append(
+            Line2D([0], [0], marker='o', color='w', label=f'Test outliers ({config_name}={value})',
+                   markerfacecolor=colors[i], markersize=10))
+    plt.xlabel('t-SNE 1')
+    plt.ylabel('t-SNE 2')
+    plt.title(f'{anomaly_type} {config_name}')
+    plt.tight_layout()
+    plt.savefig(f'logs/training/{trail}/{anomaly_type}_{config_name}.pdf', bbox_inches='tight')
+    plt.show()
+    plt.close()
+
+    num_columns = 2  # Number of columns for the legend
+    plt.figure(figsize=(12, len(legend_elements) * 0.2 / num_columns))
+    plt.axis('off')
+    plt.legend(handles=legend_elements, loc='center', ncol=num_columns, fontsize=8)
+    plt.savefig(f'logs/training/{trail}/{anomaly_type}_{config_name}_legend.pdf', bbox_inches='tight')
+    # plt.show()
     plt.close()
 
 

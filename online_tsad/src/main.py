@@ -40,7 +40,6 @@ if __name__ == "__main__":
     parser.add_argument("--ckpt_monitor", type=str, default='val_loss')
     parser.add_argument("--config_path", type=str, default='configs/default.yml')
     parser.add_argument("--strategy", type=str, default='auto')
-    # parser.add_argument("--trail", type=str, default='three_anomalies')
     parser.add_argument("--trail", type=str, default='six_anomalies')
     # parser.add_argument("--device", type=str, default='cpu')
     parser.add_argument("--device", type=str, default='cuda:0')
@@ -65,23 +64,16 @@ if __name__ == "__main__":
     model = train_model(args, m_config, train_dataloader, trainval_dataloader)
     # wd, f1score = black_box_function(args, model, train_dataloader, val_dataloader, test_dataloader)
 
-    # valid_point = {'platform': {"level": 0.5, "length": 0.3}, 'mean': {"level": 0.5, "length": 0.3},
-    #                'spike': {"level": 2, "p": 0.01}}
-    # valid_anomaly_types = ['platform', 'mean', 'spike']
-    # valid_point = {'mean': {"level": 0.5, "length": 0.3}}
-    # valid_anomaly_types = ['platform', 'mean']
-    valid_point = {'platform': {"level": 0.5, "length": 0.3}}
-    valid_anomaly_types = ['platform']
-    # valid_point = {'platform': {"level": 0.5, "length": 0.3}}
-    # valid_anomaly_types = ['mean']
-
+    valid_point = {'platform': {'level': 0.5, 'length': 0.3}, 'mean': {'level': 0.5, 'length': 0.3},
+                   'spike': {'level': 15, 'p': 0.03}}
+    valid_anomaly_types = list(valid_point.keys())
     pbounds = {'platform_level': (-1.0, 1.0), 'platform_length': (0.0, 0.5),
                'mean_level': (-1.0, 1.0), 'mean_length': (0.0, 0.5),
                'spike_level': (0, 20), 'spike_p': (0.0, 1.0),
                'amplitude_level': (0, 10), 'amplitude_length': (0.0, 0.5),
                'trend_slope': (-0.01, 0.01), 'trend_length': (0.0, 0.5),
                'variance_level': (0, 0.1), 'variance_length': (0.0, 0.5)}
-    acquisition_function = UpperConfidenceBound(kappa=0.1)
+    acquisition_function = UpperConfidenceBound(kappa=0.3)
     optimizer = BayesianOptimization(f=black_box_function, acquisition_function=acquisition_function,
                                      pbounds=pbounds, allow_duplicate_points=True, random_state=0)
     number_of_random_search = 10
@@ -93,16 +85,20 @@ if __name__ == "__main__":
                   'trend_slope': 0, 'trend_length': 0,
                   'variance_level': 0, 'variance_length': 0}
     best_score = {'wd': np.inf, 'f1-score': 0}
-    for iter in range(100):
-        if iter < number_of_random_search:
-            next_point = {k: np.round(np.random.uniform(v[0], v[1]), 4) for k, v in pbounds.items()}
-        else:
-            next_point = {k: np.round(v, 4) for k, v in optimizer.suggest().items()}
+    for iter in range(1):
+        next_point = {'platform_level': 0, 'platform_length': 0,
+                  'mean_level': 0, 'mean_length': 0,
+                  'spike_level': 0, 'spike_p': 0,
+                  'amplitude_level': 0, 'amplitude_length': 0,
+                  'trend_slope': 0, 'trend_length': 0,
+                  'variance_level': 0, 'variance_length': 0}
+        # if iter < number_of_random_search:
+        #     next_point = {k: np.round(np.random.uniform(v[0], v[1]), 4) for k, v in pbounds.items()}
+        # else:
+        #     next_point = {k: np.round(v, 4) for k, v in optimizer.suggest().items()}
         loss, f1 = black_box_function(args, model, train_dataloader, val_dataloader, test_dataloader, valid_point,
                                       valid_anomaly_types, next_point)
-        print(f'iter: {iter}, wd: {loss}, f1-score: {f1}, \n'
-              f'next_point: {next_point}, \n'
-              f'valid_point: {valid_point}')
+        print(f'iter: {iter}, wd: {loss}, f1-score: {f1}')
         wd.append(loss)
         f1score.append(f1)
         points.append(next_point)
@@ -111,9 +107,9 @@ if __name__ == "__main__":
             best_score = {'wd': loss, 'f1score': f1}
         optimizer.register(params=next_point, target=-loss)
 
-    black_box_function(args, model, train_dataloader, val_dataloader, test_dataloader, valid_point,
-                       valid_anomaly_types, best_point, True)
-
+    # black_box_function(args, model, train_dataloader, val_dataloader, test_dataloader, valid_point,
+    #                    valid_anomaly_types, best_point, True)
+    #
     # if len(wd) != 0 or len(f1score) != 0:
     #     # log_dir = f'logs/training/hpo_both'
     #     # os.makedirs(log_dir, exist_ok=True)
