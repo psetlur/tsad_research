@@ -13,7 +13,6 @@ from scipy.stats import bernoulli
 from matplotlib.lines import Line2D
 import matplotlib.cm as cm
 from matplotlib.colors import LinearSegmentedColormap
-import itertools
 
 logging.getLogger("lightning.pytorch.utilities.rank_zero").setLevel(logging.WARNING)
 logging.getLogger("pytorch_lightning").setLevel(logging.WARNING)
@@ -47,8 +46,9 @@ def inject_platform(ts_row, level, start, length):
     label = np.zeros(len(ts_row))
     start_a = int(len(ts_row) * start)
     length_a = int(len(ts_row) * length)
-    ts_row[start_a: start_a + length_a] = level
-    label[start_a: start_a + length_a] = 1
+    end_a = min(start_a + length_a, len(ts_row))  # Ensure end index is valid
+    ts_row[start_a: end_a] = level
+    label[start_a: end_a] = 1
     return ts_row, label
 
 
@@ -57,8 +57,9 @@ def inject_mean(ts_row, level, start, length):
     label = np.zeros(len(ts_row))
     start_a = int(len(ts_row) * start)
     length_a = int(len(ts_row) * length)
-    ts_row[start_a: start_a + length_a] += float(level)
-    label[start_a: start_a + length_a] = 1
+    end_a = min(start_a + length_a, len(ts_row))
+    ts_row[start_a: end_a] += float(level)
+    label[start_a: end_a] = 1
     return ts_row, label
 
 
@@ -66,11 +67,12 @@ def inject_spike(ts_row, level, p):
     ts_row = np.array(ts_row)
     label = np.zeros(len(ts_row))
     mask = bernoulli.rvs(p=p, size=len(ts_row)).astype(bool)
-    modified_values = ts_row[mask] * level
-    modified_values[(ts_row[mask] > 0) & (modified_values < 1)] = 1
-    modified_values[(ts_row[mask] < 0) & (modified_values > -1)] = -1
-    ts_row[mask] = modified_values
-    label[mask] = 1
+    if np.any(mask):
+        modified_values = ts_row[mask] * level
+        modified_values[(ts_row[mask] > 0) & (modified_values < 1)] = 1
+        modified_values[(ts_row[mask] < 0) & (modified_values > -1)] = -1
+        ts_row[mask] = modified_values
+        label[mask] = 1
     return ts_row, label
 
 
@@ -79,21 +81,32 @@ def inject_amplitude(ts_row, level, start, length):
     label = np.zeros(len(ts_row))
     start_a = int(len(ts_row) * start)
     length_a = int(len(ts_row) * length)
-    amplitude_bell = np.ones(length_a) * level
-    ts_row[start_a: start_a + length_a] *= amplitude_bell
-    label[start_a: start_a + length_a] = 1
+    end_a = min(start_a + length_a, len(ts_row))
+    actual_length = end_a - start_a
+    if actual_length > 0:
+        amplitude_bell = np.ones(actual_length) * level
+        ts_row[start_a: end_a] *= amplitude_bell
+        label[start_a: end_a] = 1
     return ts_row, label
 
 
 def inject_trend(ts_row, slope, start, length):
     ts_row = np.array(ts_row)
     label = np.zeros(len(ts_row))
-    start_a = int(len(ts_row) * start)
-    length_a = int(len(ts_row) * length)
-    slope_a = np.arange(0, length_a) * slope
-    ts_row[start_a: start_a + length_a] += slope_a
-    ts_row[start_a + length_a:] += np.full(len(ts_row) - start_a - length_a, slope_a[-1])
-    label[start_a: start_a + length_a] = 1
+    ts_len = len(ts_row)
+    start = max(0.0, min(start, 1.0))
+    length = max(0.0, min(length, 1.0))
+    start_a = int(ts_len * start)
+    length_a = int(ts_len * length)
+    end_a = min(start_a + length_a, ts_len)
+    actual_length = end_a - start_a
+    if actual_length <= 0:
+        return ts_row, label
+    slope_a = np.arange(0, actual_length) * slope
+    ts_row[start_a: end_a] += slope_a
+    if slope_a.size > 0 and end_a < ts_len:
+        ts_row[end_a:] += np.full(ts_len - end_a, slope_a[-1])
+    label[start_a: end_a] = 1
     return ts_row, label
 
 
@@ -102,34 +115,58 @@ def inject_variance(ts_row, level, start, length):
     label = np.zeros(len(ts_row))
     start_a = int(len(ts_row) * start)
     length_a = int(len(ts_row) * length)
-    var = np.random.normal(0, level, length_a)
-    ts_row[start_a: start_a + length_a] += var
-    label[start_a: start_a + length_a] = 1
+    end_a = min(start_a + length_a, len(ts_row))
+    actual_length = end_a - start_a
+    if actual_length > 0:
+        var = np.random.normal(0, level, actual_length)
+        ts_row[start_a: end_a] += var
+        label[start_a: end_a] = 1
     return ts_row, label
 
 
-def train_classify_model(args, X_train, y_train):
-    model = nn.Sequential(nn.Linear(128, 128), nn.ReLU(), nn.Linear(128, 512), ).to(args.device)
+def train_classify_model(args, X_train, y_train, sequence_length):
+    embed_dim = X_train.shape[1]
+    model = nn.Sequential(
+        nn.Linear(embed_dim, 128),
+        nn.ReLU(),
+        nn.Linear(128, sequence_length)  # Output matches sequence length
+    ).to(args.device)
+
     criterion = nn.BCEWithLogitsLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
-    for _ in range(1000):
-        out = model(X_train)
-        loss = criterion(out, y_train)
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+
+    num_epochs = 1000
+    batch_size = 64
+    dataset = torch.utils.data.TensorDataset(X_train, y_train.float())  # Ensure y is float
+    loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
+    model.train()
+    for epoch in range(num_epochs):
+        epoch_loss = 0.0
+        for x_batch, y_batch in loader:
+            optimizer.zero_grad()
+            out = model(x_batch)
+            loss = criterion(out, y_batch)
+            loss.backward()
+            optimizer.step()
+            epoch_loss += loss.item()
+
+    model.eval()
     return model
 
 
 def classify(model, X_valid):
-    y_pred = torch.where(torch.sigmoid(model(X_valid).detach()) > 0.5, 1, 0).cpu().numpy()
+    model.eval()
+    with torch.no_grad():
+        logits = model(X_valid)
+        probs = torch.sigmoid(logits)
+        y_pred = torch.where(probs > 0.5, 1, 0).cpu().numpy()
     return y_pred
 
 
-def black_box_function(args, model, train_dataloader, val_dataloader, test_dataloader, valid_point=None,
-                       valid_anomaly_types=None, train_point=None, best=False):
+def black_box_function(args, model, train_dataloader, val_dataloader, test_dataloader, valid_point,
+                       valid_anomaly_types, train_point, best=False, calculate_f1=True):
     ratio_anomaly = 0.1
-
     min_platform_level = -1.0
     min_platform_length = 0.2
     max_platform_level = 1.1
@@ -184,31 +221,41 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
     variance_level_step = 0.01
     variance_length_step = 0.02
 
-    anomaly_types = ['platform', 'mean', 'spike', 'amplitude', 'trend', 'variance']
+    # anomaly_types = ['platform', 'mean', 'spike', 'amplitude', 'trend', 'variance']
     # anomaly_types = ['platform', 'mean', 'spike']
-    # anomaly_types = ['platform']
+    anomaly_types = ['platform']
     # anomaly_types = ['mean']
     # anomaly_types = ['spike']
     # anomaly_types = ['amplitude']
     # anomaly_types = ['trend']
     # anomaly_types = ['variance']
+    model.eval()
 
     with torch.no_grad():
-        z_train, x_train_np = [], []
+        z_train_list, x_train_list = [], []
         for x_batch in train_dataloader:
             c_x = model(x_batch.to(args.device)).detach()
-            z_train.append(c_x)
-            x_train_np.append(x_batch.numpy())
-        z_train = torch.cat(z_train, dim=0)
-        x_train_np = np.concatenate(x_train_np, axis=0).reshape(len(z_train), -1)
+            z_train_list.append(c_x)
+            x_train_list.append(x_batch.cpu().numpy())  # Move to CPU before numpy
+        z_train = torch.cat(z_train_list, dim=0)
+        x_train_np = np.concatenate(x_train_list, axis=0)
+        if x_train_np.ndim == 3 and x_train_np.shape[1] == 1:
+            x_train_np = x_train_np.squeeze(1)
+        elif x_train_np.ndim != 2:
+            raise ValueError(f"Unexpected shape for x_train_np: {x_train_np.shape}")
+        sequence_length = x_train_np.shape[1]  # Get sequence length
 
-        z_valid, x_valid_np = [], []
+        z_valid_list, x_valid_list = [], []
         for x_batch in val_dataloader:
             c_x = model(x_batch.to(args.device)).detach()
-            z_valid.append(c_x)
-            x_valid_np.append(x_batch.numpy())
-        z_valid = torch.cat(z_valid, dim=0)
-        x_valid_np = np.concatenate(x_valid_np, axis=0).reshape(len(z_valid), -1)
+            z_valid_list.append(c_x)
+            x_valid_list.append(x_batch.cpu().numpy())
+        z_valid = torch.cat(z_valid_list, dim=0)
+        x_valid_np = np.concatenate(x_valid_list, axis=0)
+        if x_valid_np.ndim == 3 and x_valid_np.shape[1] == 1:
+            x_valid_np = x_valid_np.squeeze(1)  # Reshape to [N, SeqLen]
+        elif x_valid_np.ndim != 2:
+            raise ValueError(f"Unexpected shape for x_valid_np: {x_valid_np.shape}")
 
     train_inlier_index, train_outlier_index = train_test_split(range(len(x_train_np)),
                                                                train_size=1 - ratio_anomaly, random_state=0)
@@ -620,7 +667,7 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
         W_loss = SamplesLoss("sinkhorn", p=2, blur=0.05, scaling=0.9)
         for i, z_valid_aug_t in enumerate(z_valid_augs_t):
             total_loss.append(W_loss(
-                torch.cat([torch.cat([torch.cat([z_aug_t[:len(z_aug_t)//10] for z_aug_t in z_augs_t.values()], dim=0)
+                torch.cat([torch.cat([torch.cat([z_aug_t[:len(z_aug_t) // 10] for z_aug_t in z_augs_t.values()], dim=0)
                                       for z_augs_t in z_train_aug_t[anomaly_type].values()], dim=0)
                            for anomaly_type in anomaly_types], dim=0), z_valid_aug_t).item())
             y_pred = classify(model=classify_model, X_valid=z_valid_aug_t)
@@ -693,198 +740,215 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
         z_train_aug_t = emb.normalize(emb=z_train_aug)
         z_valid_aug_t = emb.normalize(emb=z_valid_aug)
 
+        # x_valid_aug, valid_labels = list(), list()
+        # for i in valid_outlier_index:
+        #     temp_x = x_valid_np[i].copy()
+        #     temp_label = np.zeros(sequence_length)
+        #     for anomaly_type in valid_anomaly_types:
+        #         if anomaly_type == 'platform':
+        #             temp_x, l = inject_platform(temp_x, valid_point[anomaly_type]['level'],
+        #                                         np.random.uniform(0, 1 - valid_point[anomaly_type]['length']),
+        #                                         valid_point[anomaly_type]['length'])
+        #         elif anomaly_type == 'mean':
+        #             temp_x, l = inject_mean(temp_x, valid_point[anomaly_type]['level'],
+        #                                     np.random.uniform(0, 1 - valid_point[anomaly_type]['length']),
+        #                                     valid_point[anomaly_type]['length'])
+        #         elif anomaly_type == 'spike':
+        #             temp_x, l = inject_spike(temp_x, valid_point[anomaly_type]['level'], valid_point[anomaly_type]['p'])
+        #         elif anomaly_type == 'amplitude':
+        #             temp_x, l = inject_amplitude(temp_x, valid_point[anomaly_type]['level'],
+        #                                          np.random.uniform(0, 1 - valid_point[anomaly_type]['length']),
+        #                                          valid_point[anomaly_type]['length'])
+        #         elif anomaly_type == 'trend':
+        #             temp_x, l = inject_trend(temp_x, valid_point[anomaly_type]['slope'],
+        #                                      np.random.uniform(0, 1 - valid_point[anomaly_type]['length']),
+        #                                      valid_point[anomaly_type]['length'])
+        #         elif anomaly_type == 'variance':
+        #             temp_x, l = inject_variance(temp_x, valid_point[anomaly_type]['level'],
+        #                                         np.random.uniform(0, 1 - valid_point[anomaly_type]['length']),
+        #                                         valid_point[anomaly_type]['length'])
+        #         else:
+        #             raise ValueError(f'Unsupported anomaly_type in valid_point: {anomaly_type}')
+        #         temp_label = np.logical_or(temp_label, l).astype(int)  # Combine labels if multiple anomalies injected
+        #         x_valid_aug.append(temp_x)
+        #         valid_labels.append(temp_label)
+        #
+        # # Parse BO suggested point
+        # train_p = {}
+        # for k, v in train_point.items():
+        #     s = k.split('_')
+        #     anomaly_type = s[0]
+        #     param_name = s[1]
+        #     if anomaly_type not in train_p:
+        #         train_p[anomaly_type] = {}
+        #     train_p[anomaly_type][param_name] = v
+        #
+        # x_train_aug, train_labels = list(), list()
+        #
+        # for i in train_outlier_index:
+        #     temp_x = x_train_np[i].copy()
+        #     temp_label = np.zeros(sequence_length)
+        #     for anomaly_type in anomaly_types:
+        #         if anomaly_type == 'platform':
+        #             if train_p[anomaly_type]['level'] != 0 or train_p[anomaly_type]['length'] != 0:
+        #                 temp_x, l = inject_platform(temp_x, train_p[anomaly_type]['level'],
+        #                                             np.random.uniform(0, 1 - train_p[anomaly_type]['length']),
+        #                                             train_p[anomaly_type]['length'])
+        #                 temp_label = np.logical_or(temp_label, l).astype(int)
+        #         elif anomaly_type == 'mean':
+        #             if train_p[anomaly_type]['level'] != 0 or train_p[anomaly_type]['length'] != 0:
+        #                 temp_x, l = inject_mean(temp_x, train_p[anomaly_type]['level'],
+        #                                         np.random.uniform(0, 1 - train_p[anomaly_type]['length']),
+        #                                         train_p[anomaly_type]['length'])
+        #                 temp_label = np.logical_or(temp_label, l).astype(int)
+        #         elif anomaly_type == 'spike':
+        #             if train_p[anomaly_type]['level'] != 0 or train_p[anomaly_type]['p'] != 0:
+        #                 temp_x, l = inject_spike(temp_x, train_p[anomaly_type]['level'], train_p[anomaly_type]['p'])
+        #                 temp_label = np.logical_or(temp_label, l).astype(int)
+        #         elif anomaly_type == 'amplitude':
+        #             if train_p[anomaly_type]['level'] != 0 or train_p[anomaly_type]['length'] != 0:
+        #                 temp_x, l = inject_amplitude(temp_x, train_p[anomaly_type]['level'],
+        #                                              np.random.uniform(0, 1 - train_p[anomaly_type]['length']),
+        #                                              train_p[anomaly_type]['length'])
+        #                 temp_label = np.logical_or(temp_label, l).astype(int)
+        #         elif anomaly_type == 'trend':
+        #             if train_p[anomaly_type]['slope'] != 0 or train_p[anomaly_type]['length'] != 0:
+        #                 temp_x, l = inject_trend(temp_x, train_p[anomaly_type]['slope'],
+        #                                          np.random.uniform(0, 1 - train_p[anomaly_type]['length']),
+        #                                          train_p[anomaly_type]['length'])
+        #                 temp_label = np.logical_or(temp_label, l).astype(int)
+        #         elif anomaly_type == 'variance':
+        #             if train_p[anomaly_type]['level'] != 0 or train_p[anomaly_type]['length'] != 0:
+        #                 temp_x, l = inject_variance(temp_x, train_p[anomaly_type]['level'],
+        #                                             np.random.uniform(0, 1 - train_p[anomaly_type]['length']),
+        #                                             train_p[anomaly_type]['length'])
+        #                 temp_label = np.logical_or(temp_label, l).astype(int)
+        #         else:
+        #             raise ValueError(f'Unsupported anomaly_type during train augmentation: {anomaly_type}')
+        #         x_train_aug.append(temp_x)
+        #         train_labels.append(temp_label)
+        #
+        # x_train_aug_tensor = torch.tensor(np.array(x_train_aug), dtype=torch.float32).unsqueeze(1).to(args.device)
+        # x_valid_aug_tensor = torch.tensor(np.array(x_valid_aug), dtype=torch.float32).unsqueeze(1).to(args.device)
+        #
+        # with torch.no_grad():
+        #     z_train_aug = model(x_train_aug_tensor).detach()
+        #     z_valid_aug = model(x_valid_aug_tensor).detach()
+        #
+        # emb = EmbNormalizer()
+        # z_train_inliers = z_train[train_inlier_index].clone()  # Use clone to avoid modifying original
+        # z_valid_inliers = z_valid[valid_inlier_index].clone()
+        #
+        # z_train_inliers = z_train_inliers.view(z_train_inliers.size(0), -1)
+        # z_valid_inliers = z_valid_inliers.view(z_valid_inliers.size(0), -1)
+        # z_train_aug_flat = z_train_aug.view(z_train_aug.size(0), -1)
+        # z_valid_aug_flat = z_valid_aug.view(z_valid_aug.size(0), -1)
+        #
+        # z_train_t, z_valid_t, _ = emb(z_train_inliers,
+        #                               z_valid_inliers,
+        #                               torch.cat([z_train_aug_flat, z_valid_aug_flat], dim=0))
+        #
+        # z_train_aug_t = emb.normalize(emb=z_train_aug_flat)
+        # z_valid_aug_t = emb.normalize(emb=z_valid_aug_flat)
+
         if best is False:
             W_loss = SamplesLoss("sinkhorn", p=2, blur=0.05, scaling=0.9)
-            loss = W_loss(z_train_aug_t, z_valid_aug_t)
-            X = torch.cat([z_train_t, z_train_aug_t.detach()], dim=0)
-            y = torch.tensor(np.concatenate([np.zeros((len(train_inlier_index), x_train_np.shape[1])),
-                                             train_labels], axis=0)).to(args.device)
-            classify_model = train_classify_model(args=args, X_train=X, y_train=y)
-            y_pred = classify(model=classify_model, X_valid=z_valid_aug_t.detach())
-            f1score = f1_score(torch.tensor(np.array(valid_labels)).reshape(-1), y_pred.reshape(-1))
-            return loss.item(), f1score
+            loss = W_loss(z_train_aug_t, z_valid_aug_t).item()
+            # X = torch.cat([z_train_t, z_train_aug_t.detach()], dim=0)
+            # y = torch.tensor(np.concatenate([np.zeros((len(train_inlier_index), x_train_np.shape[1])),
+            #                                  train_labels], axis=0)).to(args.device)
+            # classify_model = train_classify_model(args=args, X_train=X, y_train=y)
+            # y_pred = classify(model=classify_model, X_valid=z_valid_aug_t.detach())
+            # f1score = f1_score(torch.tensor(np.array(valid_labels)).reshape(-1), y_pred.reshape(-1))
+            # return loss, f1score
+
+            # W_loss = SamplesLoss("sinkhorn", p=2, blur=0.05, scaling=0.9)
+            # loss_tensor = W_loss(z_train_aug_t, z_valid_aug_t)
+            # loss = loss_tensor.item()
+            f1score_val = 0.0  # Default F1 score
+            if calculate_f1:
+                X_clf_train = torch.cat([z_train_t, z_train_aug_t], dim=0).detach()
+                train_labels_np = np.array(train_labels)
+                valid_labels_np = np.array(valid_labels)
+                if train_labels_np.size > 0 and train_labels_np.shape[1] == sequence_length and \
+                        valid_labels_np.size > 0 and valid_labels_np.shape[1] == sequence_length:
+                    y_clf_train_np = np.concatenate([np.zeros((len(train_inlier_index), sequence_length)),
+                                                     train_labels_np], axis=0)
+                    y_clf_train = torch.tensor(y_clf_train_np, dtype=torch.float32).to(args.device)
+                    classify_model = train_classify_model(args=args, X_train=X_clf_train, y_train=y_clf_train,
+                                                          sequence_length=sequence_length)
+                    y_pred = classify(model=classify_model, X_valid=z_valid_aug_t.detach())
+                    if y_pred.shape == valid_labels_np.shape:
+                        f1score_val = f1_score(valid_labels_np.reshape(-1), y_pred.reshape(-1), zero_division=0)
+                    else:
+                        logging.warning(
+                            f"F1 Calc: Shape mismatch between valid labels {valid_labels_np.shape} and predictions "
+                            f"{y_pred.shape}. F1=0.")
+                else:
+                    logging.warning(
+                        f"F1 Calc: Problem with label shapes/sizes. Train: {train_labels_np.shape}, "
+                        f"Valid: {valid_labels_np.shape}, Expected SeqLen: {sequence_length}. F1=0.")
+            return loss, f1score_val
         else:
-            visualize(z_train.detach(), z_valid.detach(), z_train_aug.detach(), z_valid_aug.detach())
-
-
-def evaluate_specific_point(args, model, train_dataloader, val_dataloader, test_dataloader, specific_point):
-    """
-    Evaluate a specific point configuration to get its WD and F1 score
-    
-    specific_point: Dictionary with keys for the anomaly types present
-                   (e.g., {'platform': {'level': 0.5, 'length': 0.3}, 'spike': {'level': 15, 'p': 0.03}})
-    """
-    # Extract anomaly types from the specific_point dictionary
-    valid_anomaly_types = list(specific_point.keys())
-
-    # We need to ensure ALL anomaly types are present in train_point
-    # even if they're not in valid_anomaly_types
-    train_point = {}
-
-    # First add default values for all possible anomaly types
-    default_values = {
-        'platform': {'level': 0.0, 'length': 0.0},
-        'mean': {'level': 0.0, 'length': 0.0},
-        'spike': {'level': 0.0, 'p': 0.00}
-    }
-
-    # Add all anomaly types with default values
-    for anomaly_type in ['platform', 'mean', 'spike']:
-        for param, value in default_values[anomaly_type].items():
-            train_point[f"{anomaly_type}_{param}"] = value
-
-    # Then override with our specific values
-    for anomaly_type in valid_anomaly_types:
-        for param, value in specific_point[anomaly_type].items():
-            train_point[f"{anomaly_type}_{param}"] = value
-
-    # Call black_box_function with the specific point
-    wd, f1 = black_box_function(
-        args, model, train_dataloader, val_dataloader, test_dataloader,
-        valid_point=specific_point,
-        valid_anomaly_types=valid_anomaly_types,
-        train_point=train_point,
-        best=False
-    )
-
-    return wd, f1
+            log_dir = f'logs/training/{args.trail}'
+            os.makedirs(log_dir, exist_ok=True)
+            visualize(z_train_t.cpu(), z_valid_t.cpu(), z_train_aug_t.cpu(), z_valid_aug_t.cpu())
+            return None, None  # Match return signature
 
 
 def visualize(train, test, train_aug, test_outlier):
-    xt = TSNE(n_components=2, random_state=42).fit_transform(
-        torch.cat([train, test, train_aug, test_outlier], dim=0).cpu().numpy())
+    train_np = train.cpu().numpy() if isinstance(train, torch.Tensor) else train
+    test_np = test.cpu().numpy() if isinstance(test, torch.Tensor) else test
+    train_aug_np = train_aug.cpu().numpy() if isinstance(train_aug, torch.Tensor) else train_aug
+    test_outlier_np = test_outlier.cpu().numpy() if isinstance(test_outlier, torch.Tensor) else test_outlier
+
+    all_data_list = []
+    if train_np.size > 0: all_data_list.append(train_np)
+    if test_np.size > 0: all_data_list.append(test_np)
+    if train_aug_np.size > 0: all_data_list.append(train_aug_np)
+    if test_outlier_np.size > 0: all_data_list.append(test_outlier_np)
+
+    if not all_data_list:
+        logging.warning("Visualize: No data provided for t-SNE.")
+        return
+
+    all_data = np.concatenate(all_data_list, axis=0)
+
+    if all_data.shape[0] <= 1:  # TSNE needs more than 1 sample
+        logging.warning(f"Visualize: Not enough samples ({all_data.shape[0]}) for t-SNE.")
+        return
+
+    xt = TSNE(n_components=2, random_state=42, perplexity=min(30, all_data.shape[0] - 1)).fit_transform(
+        all_data)  # Adjust perplexity
+
     plt.figure(figsize=(8, 6))
     start_idx = 0
-    plt.scatter(xt[start_idx:start_idx + len(train), 0], xt[start_idx:start_idx + len(train), 1], c='b', alpha=0.5,
-                label='Train Data')
-    start_idx += len(train)
-    plt.scatter(xt[start_idx:start_idx + len(test), 0], xt[start_idx:start_idx + len(test), 1], c='g',
-                alpha=0.5, label='Test Data')
-    start_idx += len(test)
-    plt.scatter(xt[start_idx:start_idx + len(train_aug), 0], xt[start_idx:start_idx + len(train_aug), 1], c='orange',
-                alpha=0.5, label='Train Augment')
-    start_idx += len(train_aug)
-    plt.scatter(xt[start_idx:start_idx + len(test_outlier), 0], xt[start_idx:start_idx + len(test_outlier), 1], c='r',
-                alpha=0.5, label='Test Outlier')
+    if train_np.size > 0:
+        plt.scatter(xt[start_idx:start_idx + len(train_np), 0], xt[start_idx:start_idx + len(train_np), 1], c='b',
+                    alpha=0.5, label='Train Inlier')
+        start_idx += len(train_np)
+    if test_np.size > 0:
+        plt.scatter(xt[start_idx:start_idx + len(test_np), 0], xt[start_idx:start_idx + len(test_np), 1], c='g',
+                    alpha=0.5, label='Valid Inlier')
+        start_idx += len(test_np)
+    if train_aug_np.size > 0:
+        plt.scatter(xt[start_idx:start_idx + len(train_aug_np), 0], xt[start_idx:start_idx + len(train_aug_np), 1],
+                    c='orange', alpha=0.5, label='Train Aug (BO Point)')
+        start_idx += len(train_aug_np)
+    if test_outlier_np.size > 0:
+        plt.scatter(xt[start_idx:start_idx + len(test_outlier_np), 0],
+                    xt[start_idx:start_idx + len(test_outlier_np), 1], c='r', alpha=0.5,
+                    label='Valid Aug (Target Point)')
+
     plt.legend()
     plt.xlabel('t-SNE 1')
     plt.ylabel('t-SNE 2')
     plt.tight_layout()
-    plt.title('Optimized train config vs test config')
-    log_dir = f'logs/training/hpo'
+    plt.title('t-SNE of Embeddings (Final Best Point vs Target)')
+    log_dir = 'logs/viz'  # Example placeholder
     os.makedirs(log_dir, exist_ok=True)
-    plt.savefig(f'{log_dir}/visualization.pdf', dpi=500, bbox_inches='tight')
-    plt.show()
-    plt.close()
-
-
-def create_dark_green_cmap(name="DarkGreen"):
-    cdict = {
-        'red': [(0.0, 0.8, 0.8), (1.0, 0.0, 0.0)],
-        'green': [(0.0, 1.0, 1.0), (1.0, 0.2, 0.2)],
-        'blue': [(0.0, 0.8, 0.8), (1.0, 0.0, 0.0)],
-    }
-    return LinearSegmentedColormap(name, cdict)
-
-
-def create_brown_cmap(name="Brown"):
-    cdict = {
-        'red': [(0.0, 1.0, 1.0), (1.0, 0.5, 0.5)],
-        'green': [(0.0, 0.8, 0.8), (1.0, 0.2, 0.2)],
-        'blue': [(0.0, 0.6, 0.6), (1.0, 0.0, 0.0)],
-    }
-    return LinearSegmentedColormap(name, cdict)
-
-
-dark_green_cmap = create_dark_green_cmap()
-brown_cmap = create_brown_cmap()
-
-COLORS = {
-    'level': {
-        'train': {
-            'platform': 'Blues',
-            'mean': 'Reds'
-        },
-        'valid': {
-            'platform': 'Purples',
-            'mean': 'Oranges'
-        }
-    },
-    'length': {
-        'train': {
-            'platform': 'Greens',
-            'mean': 'Greys'
-        },
-        'valid': {
-            'platform': dark_green_cmap,
-            'mean': brown_cmap
-        }
-    }
-}
-
-
-def visualize_multiple(inlier, outlier, combinations, trail):
-    inlier_data = torch.cat([inlier['train'], inlier['valid']], dim=0)
-    outlier_data = torch.cat([torch.cat([outlier['train'][combination] for combination in combinations], dim=0),
-                              torch.cat([outlier['valid'][combination] for combination in combinations], dim=0)],
-                             dim=0)
-    all_data = torch.cat([inlier_data, outlier_data], dim=0).to('cpu').numpy()
-    inlier_size = len(inlier_data)
-    xt = TSNE(n_components=2, random_state=42).fit_transform(all_data)
-    plt.figure(figsize=(12, 10))
-
-    # train and test inliers
-    plt.scatter(xt[:len(inlier['train']), 0], xt[:len(inlier['train']), 1], c='b', alpha=0.5, label='Train inliers')
-    plt.scatter(xt[len(inlier['train']): len(inlier['train']) + len(inlier['valid']), 0],
-                xt[len(inlier['train']): len(inlier['train']) + len(inlier['valid']), 1],
-                c='g', alpha=0.5, label='Test inliers')
-    legend_elements = [
-        Line2D([0], [0], marker='o', color='w', label='Train inliers', markerfacecolor='b', markersize=10),
-        Line2D([0], [0], marker='o', color='w', label='Test inliers', markerfacecolor='g', markersize=10)
-    ]
-
-    r = np.arange(len(combinations))
-    normalized_values = (r - np.min(r)) / (np.max(r) - np.min(r))
-    normalized_values = normalized_values * (1 - 0.5) + 0.5
-    # train outliers
-    cmap = cm.get_cmap('Greys')
-    colors = [cmap(val) for val in normalized_values]
-    start_idx = inlier_size
-    for i, combination in enumerate(combinations):
-        end_idx = start_idx + len(outlier['train'][combination])
-        plt.scatter(xt[start_idx:end_idx, 0], xt[start_idx:end_idx, 1], c=[colors[i]] * (end_idx - start_idx),
-                    alpha=0.5)
-        start_idx = end_idx
-    for i, combination in enumerate(combinations):
-        legend_elements.append(Line2D([0], [0], marker='o', color='w', label=f'Train {combination}',
-                                      markerfacecolor=colors[i], markersize=10))
-
-    # valid outliers
-    cmap = cm.get_cmap('Reds')
-    colors = [cmap(val) for val in normalized_values]
-    for i, combination in enumerate(combinations):
-        end_idx = start_idx + len(outlier['valid'][combination])
-        plt.scatter(xt[start_idx:end_idx, 0], xt[start_idx:end_idx, 1], c=[colors[i]] * (end_idx - start_idx),
-                    alpha=0.5)
-        start_idx = end_idx
-    for i, combination in enumerate(combinations):
-        legend_elements.append(Line2D([0], [0], marker='o', color='w', label=f'Test {combination}',
-                                      markerfacecolor=colors[i], markersize=10))
-
-    plt.xlabel('t-SNE 1')
-    plt.ylabel('t-SNE 2')
-    plt.title('t-SNE Visualization of Embeddings')
-    plt.tight_layout()
-    plt.savefig(f'logs/training/{trail}/visualization.pdf', bbox_inches='tight')
-    plt.show()
-    plt.close()
-
-    num_columns = 3  # Number of columns for the legend
-    plt.figure(figsize=(12, len(legend_elements) * 0.2 / num_columns))
-    plt.axis('off')
-    plt.legend(handles=legend_elements, loc='center', ncol=num_columns, fontsize=8)
-    plt.savefig(f'logs/training/{trail}/legend.pdf', bbox_inches='tight')
-    plt.show()
+    plt.savefig(f'{log_dir}/tsne_visualization_best.pdf', dpi=300, bbox_inches='tight')
+    # plt.show() # Avoid showing plots in non-interactive environments
     plt.close()
 
 
@@ -952,11 +1016,10 @@ def visualize_anomaly(train_inlier, valid_inlier, train_augs, valid_augs, config
 
 
 def visualize_time_series(time_series):
-    plt.figure(figsize=(10, 6))
-    plt.plot(time_series, label="Time Series", color="blue", linewidth=2)
-    plt.title("Time Series Visualization", fontsize=16)
-    plt.xlabel("Time Step", fontsize=12)
-    plt.ylabel("Value", fontsize=12)
-    plt.grid(alpha=0.5)
-    plt.legend(fontsize=12)
-    plt.show()
+    plt.figure(figsize=(10, 4))  # Smaller figure
+    plt.plot(time_series, label="Time Series", color="blue", linewidth=1)
+    plt.title("Time Series Visualization", fontsize=14)
+    plt.xlabel("Time Step", fontsize=10)
+    plt.ylabel("Value", fontsize=10)
+    plt.grid(alpha=0.3)
+    plt.close()
