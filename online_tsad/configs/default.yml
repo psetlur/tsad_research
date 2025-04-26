@@ -5,6 +5,6 @@ data_params:
     meta_data_path: 'meta_data.parquet'
 model_params:
   batch_size: 128
-  lr: 0.00001
+  lr: 0.0001
   ts_input_size: 512
-  epochs: 100
+  epochs: 1000

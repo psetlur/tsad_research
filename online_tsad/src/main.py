@@ -43,8 +43,7 @@ if __name__ == "__main__":
     parser.add_argument("--ckpt_monitor", type=str, default='val_loss')
     parser.add_argument("--config_path", type=str, default='configs/default.yml')
     parser.add_argument("--strategy", type=str, default='auto')
-    # parser.add_argument("--trail", type=str, default='six_anomalies')
-    parser.add_argument("--trail", type=str, default='six_anomalies_stak_ucb_fast')  # Updated trail
+    parser.add_argument("--trail", type=str, default='fixed_spike')
     parser.add_argument("--device", type=str, default='cuda:0')
     parser.add_argument("--test_mode", type=bool, default=False, action=argparse.BooleanOptionalAction)
     parser.add_argument("--wandb", type=bool, default=False, action=argparse.BooleanOptionalAction)
@@ -64,6 +63,12 @@ if __name__ == "__main__":
         [X_train], [X_val], [X_test, y_test], batch_size=m_config["batch_size"])
 
     model = train_model(args, m_config, train_dataloader, trainval_dataloader)
+    wd, f1 = black_box_function(args, model, train_dataloader, val_dataloader, test_dataloader)
+    with open(f'logs/training/{args.trail}/wd_f1score.txt', 'w') as file:
+        file.write('wd: ' + str(wd))
+        file.write("\n")
+        file.write('f1score: ' + str(f1))
+    raise Exception()
 
     stak_params = {
         "base_kappa": 0.3,
@@ -78,6 +83,13 @@ if __name__ == "__main__":
     #                'variance': {"level": 0.01, "length": 0.3}}
     valid_point = {'platform': {"level": 0.5, "length": 0.3}}
     valid_anomaly_types = list(valid_point.keys())
+
+    best_point = {'platform_level': 0.5, 'platform_length': 0.3}
+    wd, f1 = black_box_function(args, model, train_dataloader, val_dataloader, test_dataloader, valid_point,
+                                valid_anomaly_types,
+                                best_point, calculate_f1=True)  # Calculate F1 NOW
+    print(f'{wd}, {f1}')
+    raise Exception()
 
     pbounds = {'platform_level': (-1.0, 1.0), 'platform_length': (0.0, 0.5),
                'mean_level': (-1.0, 1.0), 'mean_length': (0.0, 0.5),

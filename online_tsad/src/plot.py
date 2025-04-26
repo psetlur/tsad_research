@@ -4,8 +4,7 @@ import numpy as np
 import ast
 import os
 
-# trail = 'three_anomalies'
-trail = 'six_anomalies'
+trail = 'fixed_spike'
 
 
 def plot_loss_curve(last=False):
@@ -51,7 +50,7 @@ def plot_wd_f1score():
                 values[i, j] = data[x][y]
         plt.figure(figsize=(8, 6))
         mesh = plt.pcolormesh(y_indices, x_indices, np.ma.masked_where(values == -1, values),
-                              cmap="viridis",  vmin=np.min(values), vmax=np.max(values))
+                              cmap="viridis", vmin=np.min(values), vmax=np.max(values))
         if title[-2:] == 'WD':
             for i in range(n):
                 column = values[:, i]
@@ -75,11 +74,76 @@ def plot_wd_f1score():
         plt.savefig(f'logs/training/{trail}/{config_name}_{title}.pdf')
         plt.show()
 
-
     for anomaly_type in wd.keys():
         for config in wd[anomaly_type].keys():
             plot_heatmap(data=wd[anomaly_type][config], title=f'{anomaly_type} WD', config_name=config)
             plot_heatmap(data=f1score[anomaly_type][config], title=f'{anomaly_type} F1-score', config_name=config)
+
+
+def _plot_wd_f1score():
+    with open(f"logs/training/{trail}/wd_f1score.txt", "r") as f:
+        lines = f.readlines()
+        wd = ast.literal_eval(lines[0][4:])
+        f1score = ast.literal_eval(lines[1][9:])
+
+    def plot_heatmap(data, title, config_name):
+        configs = sorted(data.keys())
+        n = len(configs)
+        x_indices, y_indices = np.meshgrid(range(n), range(n))
+        values = np.zeros((n, n))
+        for i, x in enumerate(configs):
+            for j, y in enumerate(configs):
+                values[i, j] = data[x][y]
+        plt.figure(figsize=(8, 6))
+        mesh = plt.pcolormesh(y_indices, x_indices, np.ma.masked_where(values == -1, values),
+                              cmap="viridis", vmin=np.min(values), vmax=np.max(values))
+        if title[-2:] == 'WD':
+            for i in range(n):
+                column = values[i, :]
+                min_idx = np.argmin(column)
+                plt.scatter(i, min_idx, color='red', s=50, edgecolor='black', label='Min Value')
+        else:
+            for i in range(n):
+                column = values[i, :]
+                reversed_column = column[::-1]
+                max_idx_reversed = np.argmax(reversed_column)
+                max_idx = len(column) - 1 - max_idx_reversed
+                plt.scatter(i, max_idx, color='red', s=50, edgecolor='black', label='Max Value')
+        plt.xticks(range(n), configs, rotation=90)
+        plt.yticks(range(n), configs)
+        plt.colorbar(mesh, label='Value')
+        plt.xlabel(f'train_{config_name}')
+        plt.ylabel(f'test_{config_name}')
+        plt.title(title)
+        plt.tight_layout()
+        handles, labels = plt.gca().get_legend_handles_labels()
+        by_label = dict(zip(labels, handles))
+        plt.legend(by_label.values(), by_label.keys(), loc='upper left')
+        plt.savefig(f'logs/training/{trail}/{config_name}_{title}.pdf')
+        plt.show()
+
+    anomaly_types = ['spike']
+
+    for anomaly_type in anomaly_types:
+        for config in f1score[anomaly_type].keys():
+            plot_heatmap(data=wd[anomaly_type][config], title=f'{anomaly_type} WD', config_name=config)
+            plot_heatmap(data=f1score[anomaly_type][config], title=f'{anomaly_type} F1-score', config_name=config)
+
+
+def plot_classifier_loss_curve(config):
+    with open(f"logs/training/{trail}/classifier_loss_{config}.txt", "r") as f:
+        lines = f.readlines()
+        loss_data = ast.literal_eval(lines[0])
+
+    epochs = range(1, len(loss_data) + 1)
+    plt.figure(figsize=(8, 6))
+    plt.plot(epochs, loss_data, marker='o', linestyle='-', color='b', label='Loss', markevery=100)
+    plt.title('Validation Loss Curve', fontsize=16)
+    plt.xlabel('Epochs', fontsize=14)
+    plt.ylabel('Loss', fontsize=14)
+    plt.grid(True, linestyle='--', alpha=0.6)
+    plt.legend(fontsize=12)
+    plt.savefig(f'logs/training/{trail}/classifier_loss_{config}.pdf')
 
 
 def plot_wd_f1score_combined():
@@ -97,7 +161,7 @@ def plot_wd_f1score_combined():
                 values[i, j] = data[x][y]
         axis = [f"{str(key)}/ {i}" for i, key in enumerate(axis)]
         plt.figure(figsize=(24, 18))
-        plt.pcolormesh(num, num, values, cmap="viridis", vmin=np.min(values),vmax=np.max(values))
+        plt.pcolormesh(num, num, values, cmap="viridis", vmin=np.min(values), vmax=np.max(values))
         if title[-2:] == 'WD':
             for i in range(values.shape[1]):
                 column = values[i, :]
@@ -125,7 +189,8 @@ def plot_wd_f1score_combined():
     plot_heatmap(data=f1score, title=f'F1-Score')
 
 
-def plot_wd_f1score_line(input_filepath, output_filepath, type="wd", anomaly="platform", level=0.5, length=0.3, best_value=None, baseline=None):
+def plot_wd_f1score_line(input_filepath, output_filepath, type="wd", anomaly="platform", level=0.5, length=0.3,
+                         best_value=None, baseline=None):
     df = pd.read_csv(input_filepath)
     plt.figure(figsize=(12, 10))
 
@@ -201,11 +266,11 @@ def plot_wd_f1score_line(input_filepath, output_filepath, type="wd", anomaly="pl
         if type == "wd" and best_value > y_max:
             # If best value exceeds the cap, don't show the line
             plt.text(0.02, 0.98, f'{best_type} = {best_value:.4f} (beyond scale)',
-                    transform=plt.gca().transAxes, verticalalignment='top',
-                    bbox=dict(boxstyle='round', facecolor='red', alpha=0.2))
+                     transform=plt.gca().transAxes, verticalalignment='top',
+                     bbox=dict(boxstyle='round', facecolor='red', alpha=0.2))
         else:
             plt.axhline(y=best_value, color='red', linestyle='-', linewidth=2,
-                       label=f'{best_type} = {best_value:.4f}')
+                        label=f'{best_type} = {best_value:.4f}')
 
     # Adding horizontal line for baseline
     if baseline is not None:
@@ -213,11 +278,11 @@ def plot_wd_f1score_line(input_filepath, output_filepath, type="wd", anomaly="pl
         if type == "wd" and baseline > y_max:
             # If baseline exceeds the cap, don't show the line
             plt.text(0.02, 0.92, f'{baseline_type} = {baseline:.4f} (beyond scale)',
-                    transform=plt.gca().transAxes, verticalalignment='top',
-                    bbox=dict(boxstyle='round', facecolor='red', alpha=0.2))
+                     transform=plt.gca().transAxes, verticalalignment='top',
+                     bbox=dict(boxstyle='round', facecolor='red', alpha=0.2))
         else:
             plt.axhline(y=baseline, color='purple', linestyle='-', linewidth=2,
-                       label=f'{baseline_type} = {baseline:.4f}')
+                        label=f'{baseline_type} = {baseline:.4f}')
 
     plt.xlabel("Iteration")
     plt.ylabel(type.upper())
@@ -234,7 +299,9 @@ def plot_wd_f1score_line(input_filepath, output_filepath, type="wd", anomaly="pl
     plt.savefig(output_filepath)
     plt.show()
 
-def plot_level_length_changes(input_filepath, output_filepath, level=0.5, length=0.3, spike_level=15, spike_p=0.03, anomaly="platform"):
+
+def plot_level_length_changes(input_filepath, output_filepath, level=0.5, length=0.3, spike_level=15, spike_p=0.03,
+                              anomaly="platform"):
     # Read the CSV file
     df = pd.read_csv(input_filepath)
 
@@ -243,11 +310,11 @@ def plot_level_length_changes(input_filepath, output_filepath, level=0.5, length
 
     # Plot 1: Platform & Mean Levels only (separated from spike)
     axs[0].plot(df['iter'], df['platform_level'], marker='.', linestyle='-',
-             color='blue', linewidth=2, label='Platform Level')
+                color='blue', linewidth=2, label='Platform Level')
     axs[0].plot(df['iter'], df['mean_level'], marker='.', linestyle='-',
-             color='orange', linewidth=2, label='Mean Level')
+                color='orange', linewidth=2, label='Mean Level')
     axs[0].axhline(y=level, color='red', linestyle='-', linewidth=3, alpha=1.0,
-                label=f'Target Level ({level})')
+                   label=f'Target Level ({level})')
     axs[0].set_ylabel('Level')
     axs[0].set_title('Platform & Mean Level Changes Over Iterations')
     axs[0].grid(True, linestyle='--', alpha=0.7)
@@ -255,9 +322,9 @@ def plot_level_length_changes(input_filepath, output_filepath, level=0.5, length
 
     # Plot 2: Spike Level (separate)
     axs[1].plot(df['iter'], df['spike_level'], marker='.', linestyle='-',
-             color='green', linewidth=2, label='Spike Level')
+                color='green', linewidth=2, label='Spike Level')
     axs[1].axhline(y=spike_level, color='darkgreen', linestyle='-', linewidth=3, alpha=1.0,
-                label=f'Target Spike Level ({spike_level})')
+                   label=f'Target Spike Level ({spike_level})')
     axs[1].set_ylabel('Level')
     axs[1].set_title('Spike Level Changes Over Iterations')
     axs[1].grid(True, linestyle='--', alpha=0.7)
@@ -265,11 +332,11 @@ def plot_level_length_changes(input_filepath, output_filepath, level=0.5, length
 
     # Plot 3: Platform & Mean Length (combined)
     axs[2].plot(df['iter'], df['platform_length'], marker='.', linestyle='-',
-             color='blue', linewidth=2, label='Platform Length')
+                color='blue', linewidth=2, label='Platform Length')
     axs[2].plot(df['iter'], df['mean_length'], marker='.', linestyle='-',
-             color='orange', linewidth=2, label='Mean Length')
+                color='orange', linewidth=2, label='Mean Length')
     axs[2].axhline(y=length, color='red', linestyle='-', linewidth=3, alpha=1.0,
-                label=f'Target Length ({length})')
+                   label=f'Target Length ({length})')
     axs[2].set_ylabel('Length')
     axs[2].set_title('Platform & Mean Length Changes Over Iterations')
     axs[2].grid(True, linestyle='--', alpha=0.7)
@@ -277,9 +344,9 @@ def plot_level_length_changes(input_filepath, output_filepath, level=0.5, length
 
     # Plot 4: Spike Probability (separate)
     axs[3].plot(df['iter'], df['spike_p'], marker='.', linestyle='-',
-             color='green', linewidth=2, label='Spike Probability')
+                color='green', linewidth=2, label='Spike Probability')
     axs[3].axhline(y=spike_p, color='darkgreen', linestyle='-', linewidth=3, alpha=1.0,
-                label=f'Target Probability ({spike_p})')
+                   label=f'Target Probability ({spike_p})')
     axs[3].set_xlabel('Iteration')
     axs[3].set_ylabel('Probability')
     axs[3].set_title('Spike Probability Changes Over Iterations')
@@ -292,6 +359,7 @@ def plot_level_length_changes(input_filepath, output_filepath, level=0.5, length
     plt.show()
 
     return fig
+
 
 def plot_wd_f1score_spike():
     with open(f"logs/training/{trail}/spike_wd_f1score.txt", "r") as f:
@@ -340,7 +408,9 @@ def plot_wd_f1score_spike():
     plot_heatmap(data=wd, title=f'spike_WD', config_name='p')
     plot_heatmap(data=f1score, title=f'spike_F1-score', config_name='p')
 
-def plot_level_length_step_function(input_filepath, output_filepath, level=0.5, length=0.3, spike_level=15, spike_p=0.03):
+
+def plot_level_length_step_function(input_filepath, output_filepath, level=0.5, length=0.3, spike_level=15,
+                                    spike_p=0.03):
     # Read the CSV file
     df = pd.read_csv(input_filepath)
 
@@ -379,11 +449,11 @@ def plot_level_length_step_function(input_filepath, output_filepath, level=0.5, 
 
     # Plot 1: Platform & Mean Levels
     axs[0].plot(best_config['iter'], best_config['platform_level'], linestyle='-',
-             color='blue', linewidth=2, label='Platform Level')
+                color='blue', linewidth=2, label='Platform Level')
     axs[0].plot(best_config['iter'], best_config['mean_level'], linestyle='-',
-             color='orange', linewidth=2, label='Mean Level')
+                color='orange', linewidth=2, label='Mean Level')
     axs[0].axhline(y=level, color='red', linestyle='-', linewidth=3, alpha=0.7,
-                label=f'Target Level ({level})')
+                   label=f'Target Level ({level})')
 
     # Add markers at change points
     change_points = df[is_new_min]
@@ -398,9 +468,9 @@ def plot_level_length_step_function(input_filepath, output_filepath, level=0.5, 
 
     # Plot 2: Spike Level
     axs[1].plot(best_config['iter'], best_config['spike_level'], linestyle='-',
-             color='green', linewidth=2, label='Spike Level')
+                color='green', linewidth=2, label='Spike Level')
     axs[1].axhline(y=spike_level, color='darkgreen', linestyle='-', linewidth=3, alpha=0.7,
-                label=f'Target Spike Level ({spike_level})')
+                   label=f'Target Spike Level ({spike_level})')
 
     # Add markers at change points
     for i, row in change_points.iterrows():
@@ -413,11 +483,11 @@ def plot_level_length_step_function(input_filepath, output_filepath, level=0.5, 
 
     # Plot 3: Platform & Mean Length
     axs[2].plot(best_config['iter'], best_config['platform_length'], linestyle='-',
-             color='blue', linewidth=2, label='Platform Length')
+                color='blue', linewidth=2, label='Platform Length')
     axs[2].plot(best_config['iter'], best_config['mean_length'], linestyle='-',
-             color='orange', linewidth=2, label='Mean Length')
+                color='orange', linewidth=2, label='Mean Length')
     axs[2].axhline(y=length, color='red', linestyle='-', linewidth=3, alpha=0.7,
-                label=f'Target Length ({length})')
+                   label=f'Target Length ({length})')
 
     # Add markers at change points
     for i, row in change_points.iterrows():
@@ -431,9 +501,9 @@ def plot_level_length_step_function(input_filepath, output_filepath, level=0.5, 
 
     # Plot 4: Spike Probability
     axs[3].plot(best_config['iter'], best_config['spike_p'], linestyle='-',
-             color='green', linewidth=2, label='Spike Probability')
+                color='green', linewidth=2, label='Spike Probability')
     axs[3].axhline(y=spike_p, color='darkgreen', linestyle='-', linewidth=3, alpha=0.7,
-                label=f'Target Probability ({spike_p})')
+                   label=f'Target Probability ({spike_p})')
 
     # Add markers at change points
     for i, row in change_points.iterrows():
@@ -447,7 +517,7 @@ def plot_level_length_step_function(input_filepath, output_filepath, level=0.5, 
 
     # Add an overall title
     plt.suptitle('Parameter Evolution Using Best Configuration at Each Iteration',
-                fontsize=16, y=0.995)
+                 fontsize=16, y=0.995)
 
     # Adjust layout
     plt.tight_layout(rect=[0, 0, 1, 0.98])
@@ -455,7 +525,9 @@ def plot_level_length_step_function(input_filepath, output_filepath, level=0.5, 
 
     return fig
 
-def plot_running_best_only(input_filepath, output_filepath, type="wd", anomaly="platform", best_value=None, baseline=None):
+
+def plot_running_best_only(input_filepath, output_filepath, type="wd", anomaly="platform", best_value=None,
+                           baseline=None):
     df = pd.read_csv(input_filepath)
     plt.figure(figsize=(12, 10))
 
@@ -501,28 +573,28 @@ def plot_running_best_only(input_filepath, output_filepath, type="wd", anomaly="
     if best_value is not None:
         best_type = "Best WD" if type == "wd" else "Best F1"
         if type == "wd" and best_value > y_max:
-            plt.text(0.02, 0.98, f'{best_type} = {best_value:.4f} (beyond scale)', 
+            plt.text(0.02, 0.98, f'{best_type} = {best_value:.4f} (beyond scale)',
                      transform=plt.gca().transAxes, verticalalignment='top',
                      bbox=dict(boxstyle='round', facecolor='red', alpha=0.2))
         else:
-            plt.axhline(y=best_value, color='red', linestyle='-', linewidth=2, 
+            plt.axhline(y=best_value, color='red', linestyle='-', linewidth=2,
                         label=f'{best_type} = {best_value:.4f}')
 
     # Horizontal line for baseline
     if baseline is not None:
         baseline_type = "Baseline WD" if type == "wd" else "Baseline F1"
         if type == "wd" and baseline > y_max:
-            plt.text(0.02, 0.92, f'{baseline_type} = {baseline:.4f} (beyond scale)', 
+            plt.text(0.02, 0.92, f'{baseline_type} = {baseline:.4f} (beyond scale)',
                      transform=plt.gca().transAxes, verticalalignment='top',
                      bbox=dict(boxstyle='round', facecolor='red', alpha=0.2))
         else:
-            plt.axhline(y=baseline, color='purple', linestyle='-', linewidth=2, 
+            plt.axhline(y=baseline, color='purple', linestyle='-', linewidth=2,
                         label=f'{baseline_type} = {baseline:.4f}')
 
     plt.xlabel("Iteration")
     plt.ylabel(type.upper())
     plt.title(f"Running Best {type.upper()} for {anomaly} anomalies")
-    
+
     if type == "wd":
         plt.text(0.5, 0.01, f"Note: Y-axis capped at {y_max:.2f} to focus on smaller WD values",
                  ha='center', transform=plt.gcf().transFigure, fontsize=10,
@@ -534,13 +606,16 @@ def plot_running_best_only(input_filepath, output_filepath, type="wd", anomaly="
     plt.savefig(output_filepath)
     plt.show()
 
+
 if __name__ == "__main__":
     # plot_loss_curve(last=False)
     # plot_loss_curve(last=True)
     # plot_wd_f1score()
+    _plot_wd_f1score()
+    # plot_classifier_loss_curve('level_20')
     # plot_wd_f1score_combined()
     # plot_wd_f1score_spike()
-
+    raise Exception()
     anomaly = "all"
     type = "wd"
     best_value = 0.09507475793361664
@@ -548,15 +623,13 @@ if __name__ == "__main__":
     spike_level = 15
     spike_p = 0.03
 
-
-
     plot_running_best_only(
-        input_filepath = f"logs/csv/six_anomalies/bayes_wd_f1score_{anomaly}.csv",
-        output_filepath = f"logs/csv/six_anomalies/bayes_{type}_{anomaly}.png",
-        anomaly = anomaly,
-        type = type,
-        best_value = best_value,
-        baseline = baseline)
+        input_filepath=f"logs/csv/six_anomalies/bayes_wd_f1score_{anomaly}.csv",
+        output_filepath=f"logs/csv/six_anomalies/bayes_{type}_{anomaly}.png",
+        anomaly=anomaly,
+        type=type,
+        best_value=best_value,
+        baseline=baseline)
     # plot_level_length_step_function(
     #     input_filepath=f"logs/csv/hpo_three/bayes_wd_f1score_{anomaly}_{level}_{length}_{kappa}.csv",
     #     output_filepath=f"logs/graphs/hpo_three/bayes_{anomaly}_{level}_{length}_{kappa}_graph.png",
