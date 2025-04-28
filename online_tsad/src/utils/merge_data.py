@@ -7,9 +7,9 @@ from sklearn.model_selection import train_test_split
 if __name__ == "__main__":
     # parse args
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data_path_1", type=str, default='ucr')
-    parser.add_argument("--data_path_2", type=str, default='ucr')
-    parser.add_argument("--store_path", type=str,default='ucr_all ')
+    parser.add_argument("--data_path_1", type=str, default='smd')
+    parser.add_argument("--data_path_2", type=str, default='smd')
+    parser.add_argument("--store_path", type=str,default='smd ')
     parser.add_argument("--train_ratio", type=float, default=0.8)
     parser.add_argument("--val_ratio", type=float, default=0.1)
     parser.add_argument("--anomaly_ratio", type=float, default=0.1)

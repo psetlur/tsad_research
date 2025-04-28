@@ -177,6 +177,8 @@ class AnomFuncs:
 
         self.np_data = self.normalize_ts(self.np_data)
 
+        self.np_data = self.np_data[~np.isnan(self.np_data).any(axis=1)]
+
         self.np_data_normal = np.array(self.np_data)
 
         anomaly_params_processed, meta_keys = self._process_params(
@@ -310,7 +312,7 @@ class AnomFuncs:
 class AnomParams:
     def __init__(self):
         self.anom_params = {
-            "ucr": {
+            "smd": {
                 "level_h0": 0.2,
                 "level_h1": 0.7,
                 "length_h0": 0.1,
@@ -331,11 +333,12 @@ def main():
     # parse args
     parser = argparse.ArgumentParser()
     # parser.add_argument("--data_path", type=str, default='data/processed/cmu_motion.pkl')
-    parser.add_argument("--data_path", type=str, default='data/processed/ucr.pkl')
+    # parser.add_argument("--data_path", type=str, default='data/processed/ucr.pkl')
+    parser.add_argument("--data_path", type=str, default='data/processed/smd.pkl')
     parser.add_argument("--anom_type", type=str)
     parser.add_argument("--truncated_length", type=int, default=-1)
     parser.add_argument("--aug_num", type=int, default=1)
-    parser.add_argument("--name", type=str, default='ucr')
+    parser.add_argument("--name", type=str, default='smd')
     parser.add_argument("--seed", type=int)
     # parser.add_argument("--fixed_level", type=float, default=None, help="Fixed level for anomalies (optional)")
     # parser.add_argument("--fixed_length", type=float, default=None, help="Fixed length for anomalies (optional)")
@@ -350,7 +353,7 @@ def main():
     elif args.data_path.split('.')[1] == 'pkl':
         with open(args.data_path, 'rb') as handle:
             df = pickle.load(handle)
-
+    df=df[~(df == 0).all(axis=1)]
     # generate anomalies
     anom_funcs = AnomFuncs(df, seed=args.seed)
     anom_funcs.generate_anomalies(args.anom_type, anom_params[args.name], args.truncated_length, args.aug_num,
