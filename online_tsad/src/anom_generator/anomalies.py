@@ -310,7 +310,7 @@ class AnomFuncs:
 class AnomParams:
     def __init__(self):
         self.anom_params = {
-            "mot_platform_1_scaled": {
+            "ucr": {
                 "level_h0": 0.2,
                 "level_h1": 0.7,
                 "length_h0": 0.1,
@@ -330,11 +330,12 @@ class AnomParams:
 def main():
     # parse args
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data_path", type=str)
+    # parser.add_argument("--data_path", type=str, default='data/processed/cmu_motion.pkl')
+    parser.add_argument("--data_path", type=str, default='data/processed/ucr.pkl')
     parser.add_argument("--anom_type", type=str)
     parser.add_argument("--truncated_length", type=int, default=-1)
     parser.add_argument("--aug_num", type=int, default=1)
-    parser.add_argument("--name", type=str)
+    parser.add_argument("--name", type=str, default='ucr')
     parser.add_argument("--seed", type=int)
     # parser.add_argument("--fixed_level", type=float, default=None, help="Fixed level for anomalies (optional)")
     # parser.add_argument("--fixed_length", type=float, default=None, help="Fixed length for anomalies (optional)")

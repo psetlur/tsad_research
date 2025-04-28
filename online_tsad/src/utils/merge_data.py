@@ -4,13 +4,12 @@ import os
 
 from sklearn.model_selection import train_test_split
 
-
 if __name__ == "__main__":
     # parse args
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data_path_1", type=str)
-    parser.add_argument("--data_path_2", type=str)
-    parser.add_argument("--store_path", type=str)
+    parser.add_argument("--data_path_1", type=str, default='ucr')
+    parser.add_argument("--data_path_2", type=str, default='ucr')
+    parser.add_argument("--store_path", type=str,default='ucr_all ')
     parser.add_argument("--train_ratio", type=float, default=0.8)
     parser.add_argument("--val_ratio", type=float, default=0.1)
     parser.add_argument("--anomaly_ratio", type=float, default=0.1)
@@ -25,8 +24,10 @@ if __name__ == "__main__":
         meta_df['type'] = -1
 
         if type_idx == 0:
-            train_idx, test_idx = train_test_split(range(normal_df.shape[0]), train_size=args.train_ratio, random_state=args.seed)
-            val_idx, test_idx = train_test_split(test_idx, train_size=args.val_ratio / (1 - args.train_ratio), random_state=args.seed)
+            train_idx, test_idx = train_test_split(range(normal_df.shape[0]), train_size=args.train_ratio,
+                                                   random_state=args.seed)
+            val_idx, test_idx = train_test_split(test_idx, train_size=args.val_ratio / (1 - args.train_ratio),
+                                                 random_state=args.seed)
 
         train_df.append(normal_df.iloc[train_idx])
 

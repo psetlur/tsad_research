@@ -27,10 +27,10 @@ def train_model(args, m_config, train_dataloader, trainval_dataloader):
     # --- Instantiate the Model ---
     # The Trainer will load the state from the checkpoint into this model instance if ckpt_path is provided
     model = Encoder(args=args, ts_input_size=m_config.get("ts_input_size"), lr=m_config.get("lr")).to(args.device)
-    if os.path.exists(checkpoint_dir):
-        ckpt = os.listdir(checkpoint_dir)
-        if len(ckpt) > 0:
-            return model.load_from_checkpoint(checkpoint_dir + ckpt[0])
+    # if os.path.exists(checkpoint_dir):
+    #     ckpt = os.listdir(checkpoint_dir)
+    #     if len(ckpt) > 0:
+    #         return model.load_from_checkpoint(checkpoint_dir + ckpt[0])
 
     # --- Configure Loggers and Callbacks using utils.py ---
     if args.wandb:
@@ -71,8 +71,8 @@ def train_model(args, m_config, train_dataloader, trainval_dataloader):
 
     # --- Configure the Trainer ---
     trainer = pl.Trainer(
-        accelerator='auto',
-        devices='auto', # Or specify like [0] if needed
+        # accelerator='auto',
+        # devices='cpu', # Or specify like [0] if needed
         strategy=args.strategy,
         max_epochs=total_epochs, # Total epochs for the entire training process
         callbacks=[ckpt_callback, early_stop_callback],
