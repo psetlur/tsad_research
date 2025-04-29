@@ -82,8 +82,8 @@ class Encoder(pl.LightningModule):
         self.info_loss = InfoNCE()
         self.normal_idx = set()
         self.normal_x = torch.tensor([]).to(self.args.device)
-        # self.anomaly_types = ['platform', 'mean', 'spike', 'amplitude', 'trend', 'variance']
-        self.anomaly_types = ['platform']
+        self.anomaly_types = ['platform', 'mean', 'spike', 'amplitude', 'trend', 'variance']
+        # self.anomaly_types = ['platform']
         # self.anomaly_types = ['spike']
 
     def forward(self, x):
