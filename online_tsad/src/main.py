@@ -83,7 +83,10 @@ if __name__ == "__main__":
     parser.add_argument("--ckpt_monitor", type=str, default='val_loss')
     parser.add_argument("--config_path", type=str, default='configs/default.yml')
     parser.add_argument("--strategy", type=str, default='auto')
-    parser.add_argument("--trail", type=str, default='fixed_encoder')
+    # parser.add_argument("--trail", type=str, default='fixed_encoder')
+    # parser.add_argument("--trail", type=str, default='platform1')
+    # parser.add_argument("--trail", type=str, default='platform1')
+    parser.add_argument("--trail", type=str, default='smd')
     # parser.add_argument("--trail", type=str, default='six_anomalies_warmup_adaptive_v5') # Updated trail name
     parser.add_argument("--device", type=str, default='cuda:0')
     parser.add_argument("--test_mode", type=bool, default=False, action=argparse.BooleanOptionalAction)

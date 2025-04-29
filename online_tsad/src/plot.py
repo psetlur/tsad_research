@@ -4,7 +4,7 @@ import numpy as np
 import ast
 import os
 
-trail = 'fixed_spike'
+trail = 'platform1'
 
 
 def plot_loss_curve(last=False):
@@ -84,7 +84,7 @@ def _plot_wd_f1score():
     with open(f"logs/training/{trail}/wd_f1score.txt", "r") as f:
         lines = f.readlines()
         wd = ast.literal_eval(lines[0][4:])
-        f1score = ast.literal_eval(lines[1][9:])
+        # f1score = ast.literal_eval(lines[1][9:])
 
     def plot_heatmap(data, title, config_name):
         configs = sorted(data.keys())
@@ -122,12 +122,13 @@ def _plot_wd_f1score():
         plt.savefig(f'logs/training/{trail}/{config_name}_{title}.pdf')
         plt.show()
 
-    anomaly_types = ['spike']
+    anomaly_types = ['platform']
+    # anomaly_types = ['spike']
 
     for anomaly_type in anomaly_types:
-        for config in f1score[anomaly_type].keys():
+        for config in wd[anomaly_type].keys():
             plot_heatmap(data=wd[anomaly_type][config], title=f'{anomaly_type} WD', config_name=config)
-            plot_heatmap(data=f1score[anomaly_type][config], title=f'{anomaly_type} F1-score', config_name=config)
+            # plot_heatmap(data=f1score[anomaly_type][config], title=f'{anomaly_type} F1-score', config_name=config)
 
 
 def plot_classifier_loss_curve(config):

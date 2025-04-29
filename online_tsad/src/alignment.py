@@ -46,7 +46,7 @@ def inject_platform(ts_row, level, start, length):
     start_a = int(len(ts_row) * start)
     length_a = int(len(ts_row) * length)
     end_a = min(start_a + length_a, len(ts_row))  # Ensure end index is valid
-    ts_row[start_a: end_a] = level
+    ts_row[start_a: end_a] = float(level)
     label[start_a: end_a] = 1
     return ts_row, label
 
@@ -225,7 +225,6 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
     variance_length_step = 0.02
 
     anomaly_types = ['platform', 'mean', 'spike', 'amplitude', 'trend', 'variance']
-    # anomaly_types = ['platform', 'mean', 'spike']
     # anomaly_types = ['platform']
     # anomaly_types = ['mean']
     # anomaly_types = ['spike']
@@ -517,8 +516,10 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
                         print(f'{anomaly_type}, {train_config}, {valid_config}, '
                               f'{total_loss[anomaly_type][config][train_config][valid_config]}, '
                               f'{f1score[anomaly_type][config][train_config][valid_config]}')
-                visualize_anomaly(z_train, z_valid, z_train_aug[anomaly_type][config],
-                                  z_valid_aug[anomaly_type][config], config, args.trail, anomaly_type)
+                        print(f'{anomaly_type}, {train_config}, {valid_config}, '
+                              f'{total_loss[anomaly_type][config][train_config][valid_config]}')
+                # visualize_anomaly(z_train, z_valid, z_train_aug[anomaly_type][config],
+                #                   z_valid_aug[anomaly_type][config], config, args.trail, anomaly_type)
 
         # X = torch.cat(
         #     [z_train_t, torch.cat(

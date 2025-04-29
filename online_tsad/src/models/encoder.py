@@ -4,6 +4,7 @@ import pytorch_lightning as pl
 from info_nce import InfoNCE
 from .model import CNNEncoder
 import torch.nn.functional as F
+import random
 
 
 def generate_parameters(min, max, step, tau, exclude_zero=False):
@@ -15,17 +16,17 @@ def generate_parameters(min, max, step, tau, exclude_zero=False):
 
 
 CONFIGS = {'platform': {'level': {'min': -1, 'max': 1, 'step': 0.1, 'tau': 0.01},
-                        'length': {'min': 0.2, 'max': 0.5, 'step': 0.01, 'tau': 0.001}},
+                        'length': {'min': 100, 'max': 250, 'step': 10, 'tau': 1}},
            'mean': {'level': {'min': -1, 'max': 1, 'step': 0.1, 'tau': 0.01, 'exclude_zero': True},
-                    'length': {'min': 0.2, 'max': 0.5, 'step': 0.01, 'tau': 0.001}},
+                    'length': {'min': 100, 'max': 250, 'step': 10, 'tau': 1}},
            'spike': {'level': {'min': 2, 'max': 20, 'step': 2, 'tau': 0.2}},
            'amplitude': {'level': [{'min': 0.1, 'max': 0.9, 'step': 0.1, 'tau': 0.01},
                                    {'min': 2, 'max': 10, 'step': 1, 'tau': 0.1}],
-                         'length': {'min': 0.2, 'max': 0.5, 'step': 0.01, 'tau': 0.001}},
+                         'length': {'min': 100, 'max': 250, 'step': 10, 'tau': 1}},
            'trend': {'slope': {'min': -0.01, 'max': 0.01, 'step': 0.001, 'tau': 0.0001, 'exclude_zero': True},
-                     'length': {'min': 0.2, 'max': 0.5, 'step': 0.01, 'tau': 0.001}},
+                     'length': {'min': 100, 'max': 250, 'step': 10, 'tau': 1}},
            'variance': {'level': {'min': 0.1, 'max': 0.5, 'step': 0.05, 'tau': 0.005},
-                        'length': {'min': 0.2, 'max': 0.5, 'step': 0.01, 'tau': 0.001}}}
+                        'length': {'min': 100, 'max': 250, 'step': 10, 'tau': 1}}}
 
 PARAMETERS = {}
 for anomaly_type, params in CONFIGS.items():
@@ -40,7 +41,7 @@ LENGTH_BINS = [0.2, 0.3, 0.4, 0.5]
 LEVEL_BINS = [-1, -0.33, 0.33, 1]
 
 NUM_POSITIVE = 1
-NUM_NEGATIVE = 10
+NUM_NEGATIVE = 1
 
 
 def hist_sample(cdf, bins):
@@ -81,8 +82,8 @@ class Encoder(pl.LightningModule):
         self.info_loss = InfoNCE()
         self.normal_idx = set()
         self.normal_x = torch.tensor([]).to(self.args.device)
-        self.anomaly_types = ['platform', 'mean', 'spike', 'amplitude', 'trend', 'variance']
-        # self.anomaly_types = ['platform']
+        # self.anomaly_types = ['platform', 'mean', 'spike', 'amplitude', 'trend', 'variance']
+        self.anomaly_types = ['platform']
         # self.anomaly_types = ['spike']
 
     def forward(self, x):
@@ -91,14 +92,12 @@ class Encoder(pl.LightningModule):
 
     def inject_platform(self, ts_row, level, length, start):
         start_a = int(len(ts_row) * start)
-        length_a = int(len(ts_row) * length)
-        ts_row[start_a: start_a + length_a] = float(level)
+        ts_row[start_a: start_a + length] = float(level)
         return ts_row
 
     def inject_mean(self, ts_row, level, length, start):
         start_a = int(len(ts_row) * start)
-        length_a = int(len(ts_row) * length)
-        ts_row[start_a: start_a + length_a] += float(level)
+        ts_row[start_a: start_a + length] += float(level)
         return ts_row
 
     def inject_spike(self, ts_row, level, start):
@@ -108,25 +107,22 @@ class Encoder(pl.LightningModule):
 
     def inject_amplitude(self, ts_row, level, length, start):
         start_a = int(len(ts_row) * start)
-        length_a = int(len(ts_row) * length)
-        amplitude_bell = torch.tensor(np.ones(length_a) * level, device=ts_row.device)
-        ts_row[start_a: start_a + length_a] *= amplitude_bell
+        amplitude_bell = torch.tensor(np.ones(length) * level, device=ts_row.device)
+        ts_row[start_a: start_a + length] *= amplitude_bell
         return ts_row
 
     def inject_trend(self, ts_row, slope, length, start):
         start_a = int(len(ts_row) * start)
-        length_a = int(len(ts_row) * length)
-        slope_a = torch.tensor(np.arange(0, length_a) * slope, device=ts_row.device)
-        ts_row[start_a: start_a + length_a] += slope_a
-        ts_row[start_a + length_a:] += torch.tensor(np.full(len(ts_row) - start_a - length_a, slope_a[-1].cpu().item()),
+        slope_a = torch.tensor(np.arange(0, length) * slope, device=ts_row.device)
+        ts_row[start_a: start_a + length] += slope_a
+        ts_row[start_a + length:] += torch.tensor(np.full(len(ts_row) - start_a - length, slope_a[-1].cpu().item()),
                                                     device=ts_row.device)
         return ts_row
 
     def inject_variance(self, ts_row, level, length, start):
         start_a = int(len(ts_row) * start)
-        length_a = int(len(ts_row) * length)
-        var = torch.tensor(np.random.normal(0, level, length_a), device=ts_row.device)
-        ts_row[start_a: start_a + length_a] += var
+        var = torch.tensor(np.random.normal(0, level, length), device=ts_row.device)
+        ts_row[start_a: start_a + length] += var
         return ts_row
 
     def main_process(self, x, process):
@@ -159,18 +155,28 @@ class Encoder(pl.LightningModule):
                     m_pos = list()
                     start = np.random.uniform(0, 1)
                     for j, config in enumerate(PARAMETERS[anomaly_type].keys()):
-                        if type(PARAMETERS[anomaly_type][config]) is list:
-                            m_pos.append(np.random.uniform(max(m[j] - PARAMETERS[anomaly_type][config][index]['tau'],
-                                                               PARAMETERS[anomaly_type][config][index]['min']),
-                                                           min(m[j] + PARAMETERS[anomaly_type][config][index]['tau'],
-                                                               PARAMETERS[anomaly_type][config][index]['max'])))
-                        else:
-                            m_pos.append(np.random.uniform(max(m[j] - PARAMETERS[anomaly_type][config]['tau'],
-                                                               PARAMETERS[anomaly_type][config]['min']),
-                                                           min(m[j] + PARAMETERS[anomaly_type][config]['tau'],
-                                                               PARAMETERS[anomaly_type][config]['max'])))
                         if config == 'length':
                             start = np.random.uniform(0, 0.5)
+                            m_pos.append(np.random.choice([m[j] - PARAMETERS[anomaly_type][config]['tau'], m[j],
+                                                           m[j] + PARAMETERS[anomaly_type][config]['tau']]))
+                            if np.abs(m[j] - m_pos[j]) > PARAMETERS[anomaly_type][config]['tau']:
+                                raise Exception()
+                        else:
+                            if type(PARAMETERS[anomaly_type][config]) is list:
+                                m_pos.append(
+                                    np.random.uniform(max(m[j] - PARAMETERS[anomaly_type][config][index]['tau'],
+                                                          PARAMETERS[anomaly_type][config][index]['min']),
+                                                      min(m[j] + PARAMETERS[anomaly_type][config][index]['tau'],
+                                                          PARAMETERS[anomaly_type][config][index]['max'])))
+                                if np.abs(m[j] - m_pos[j]) > PARAMETERS[anomaly_type][config][index]['tau']:
+                                    raise Exception()
+                            else:
+                                m_pos.append(np.random.uniform(max(m[j] - PARAMETERS[anomaly_type][config]['tau'],
+                                                                   PARAMETERS[anomaly_type][config]['min']),
+                                                               min(m[j] + PARAMETERS[anomaly_type][config]['tau'],
+                                                                   PARAMETERS[anomaly_type][config]['max'])))
+                                if np.abs(m[j] - m_pos[j]) > PARAMETERS[anomaly_type][config]['tau']:
+                                    raise Exception()
                     y_pos[pos_index][i][0] = inject(y_pos[pos_index][i][0], *m_pos, start=start)
 
                 # inject negative
@@ -178,30 +184,49 @@ class Encoder(pl.LightningModule):
                     m_neg = list()
                     start = np.random.uniform(0, 1)
                     for j, config in enumerate(PARAMETERS[anomaly_type].keys()):
-                        if type(PARAMETERS[anomaly_type][config]) is list:
-                            m_neg.append(np.random.uniform(
-                                PARAMETERS[anomaly_type][config][index]['min'],
-                                m[j] - PARAMETERS[anomaly_type][config][index]['tau'])
-                                         if np.random.random() < (
-                                    (m[j] - PARAMETERS[anomaly_type][config][index]['min'] -
-                                     PARAMETERS[anomaly_type][config][index]['tau']) / (
-                                            PARAMETERS[anomaly_type][config][index]['max'] -
-                                            PARAMETERS[anomaly_type][config][index]['min'] - 2 *
-                                            PARAMETERS[anomaly_type][config][index]['tau']))
-                                         else np.random.uniform(PARAMETERS[anomaly_type][config][index]['min'],
-                                                                m[j] - PARAMETERS[anomaly_type][config][index]['tau']))
-                        else:
-                            m_neg.append(np.random.uniform(
-                                PARAMETERS[anomaly_type][config]['min'], m[j] - PARAMETERS[anomaly_type][config]['tau'])
-                                         if np.random.random() < ((m[j] - PARAMETERS[anomaly_type][config]['min'] -
-                                                                   PARAMETERS[anomaly_type][config]['tau']) / (
-                                                                          PARAMETERS[anomaly_type][config]['max'] -
-                                                                          PARAMETERS[anomaly_type][config]['min'] - 2 *
-                                                                          PARAMETERS[anomaly_type][config]['tau']))
-                                         else np.random.uniform(PARAMETERS[anomaly_type][config]['min'],
-                                                                m[j] - PARAMETERS[anomaly_type][config]['tau']))
                         if config == 'length':
                             start = np.random.uniform(0, 0.5)
+                            m_neg.append(np.random.randint(PARAMETERS[anomaly_type][config]['min'],
+                                                           m[j] - PARAMETERS[anomaly_type][config]['tau'] - 1)
+                                         if np.random.random() < ((m[j] - PARAMETERS[anomaly_type][config]['min'] -
+                                                                   PARAMETERS[anomaly_type][config]['tau'] - 1) / (
+                                                                          PARAMETERS[anomaly_type][config]['max'] -
+                                                                          PARAMETERS[anomaly_type][config]['min'] - 2 *
+                                                                          PARAMETERS[anomaly_type][config]['tau'] - 1))
+                                         else np.random.randint(m[j] + PARAMETERS[anomaly_type][config]['tau'] + 1,
+                                                                PARAMETERS[anomaly_type][config]['max']))
+                            if np.abs(m[j] - m_neg[j]) <= PARAMETERS[anomaly_type][config]['tau']:
+                                raise Exception()
+                        else:
+                            if type(PARAMETERS[anomaly_type][config]) is list:
+                                m_neg.append(np.random.uniform(
+                                    PARAMETERS[anomaly_type][config][index]['min'],
+                                    m[j] - PARAMETERS[anomaly_type][config][index]['tau'])
+                                             if np.random.random() < (
+                                        (m[j] - PARAMETERS[anomaly_type][config][index]['min'] -
+                                         PARAMETERS[anomaly_type][config][index]['tau']) / (
+                                                PARAMETERS[anomaly_type][config][index]['max'] -
+                                                PARAMETERS[anomaly_type][config][index]['min'] - 2 *
+                                                PARAMETERS[anomaly_type][config][index]['tau']))
+                                             else np.random.uniform(
+                                    m[j] + PARAMETERS[anomaly_type][config][index]['tau'],
+                                    PARAMETERS[anomaly_type][config][index]['max']))
+                                if np.abs(m[j] - m_neg[j]) <= PARAMETERS[anomaly_type][config][index]['tau']:
+                                    raise Exception()
+                            else:
+                                m_neg.append(np.random.uniform(
+                                    PARAMETERS[anomaly_type][config]['min'],
+                                    m[j] - PARAMETERS[anomaly_type][config]['tau'])
+                                             if np.random.random() < ((m[j] - PARAMETERS[anomaly_type][config]['min'] -
+                                                                       PARAMETERS[anomaly_type][config]['tau']) / (
+                                                                              PARAMETERS[anomaly_type][config]['max'] -
+                                                                              PARAMETERS[anomaly_type][config][
+                                                                                  'min'] - 2 *
+                                                                              PARAMETERS[anomaly_type][config]['tau']))
+                                             else np.random.uniform(m[j] + PARAMETERS[anomaly_type][config]['tau'],
+                                                                    PARAMETERS[anomaly_type][config]['max']))
+                                if np.abs(m[j] - m_neg[j]) <= PARAMETERS[anomaly_type][config]['tau']:
+                                    raise Exception()
                     y_neg[neg_index][i][0] = inject(y_neg[neg_index][i][0], *m_neg, start=start)
 
             c_y_dict[anomaly_type] = self(y)
