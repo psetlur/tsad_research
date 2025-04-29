@@ -26,11 +26,11 @@ def train_model(args, m_config, train_dataloader, trainval_dataloader):
 
     # --- Instantiate the Model ---
     # The Trainer will load the state from the checkpoint into this model instance if ckpt_path is provided
-    model = Encoder(args=args, ts_input_size=m_config.get("ts_input_size"), lr=m_config.get("lr")).to(args.device)
-    if os.path.exists(checkpoint_dir):
-        ckpt = os.listdir(checkpoint_dir)
-        if len(ckpt) > 0:
-            return model.load_from_checkpoint(checkpoint_dir + ckpt[0])
+    model = Encoder(args=args, ts_input_size=m_config.get("ts_input_size"), lr=m_config.get("lr"))
+    # if os.path.exists(checkpoint_dir):
+    #     ckpt = os.listdir(checkpoint_dir)
+    #     if len(ckpt) > 0:
+    #         return model.load_from_checkpoint(checkpoint_dir + ckpt[0])
 
     # --- Configure Loggers and Callbacks using utils.py ---
     if args.wandb:
@@ -56,7 +56,7 @@ def train_model(args, m_config, train_dataloader, trainval_dataloader):
 
     # Standard EarlyStopping callback
     early_stop_callback = EarlyStopping(
-        monitor="val_loss", # Make sure this matches ckpt_callback's monitor if they should align
+        monitor="val/loss", # Make sure this matches ckpt_callback's monitor if they should align
         mode="min", # Should match ckpt_callback's mode
         patience=100 # Keep original patience or adjust as needed
     )
@@ -71,8 +71,8 @@ def train_model(args, m_config, train_dataloader, trainval_dataloader):
 
     # --- Configure the Trainer ---
     trainer = pl.Trainer(
-        # accelerator='auto',
-        # devices='cpu', # Or specify like [0] if needed
+        accelerator='auto',
+        devices=args.device, # Or specify like [0] if needed
         strategy=args.strategy,
         max_epochs=total_epochs, # Total epochs for the entire training process
         callbacks=[ckpt_callback, early_stop_callback],
@@ -98,6 +98,22 @@ def train_model(args, m_config, train_dataloader, trainval_dataloader):
     best_model_path_from_callback = ckpt_callback.best_model_path
     print(f"Best model saved path according to callback: {best_model_path_from_callback}")
 
+    try:
+        actual_device = trainer.strategy.root_device
+        print(f"Trainer determined root device: {actual_device}")
+    except Exception as e:
+        print(f"Could not determine trainer's root device ({e}), falling back to args.device: {args.device}")
+        # Fallback logic: If args.device is specific like 'cuda:0', use it.
+        # If it's 'auto' or numeric, try defaulting to cuda:0 if available, else cpu.
+        if isinstance(args.device, str) and ('cuda' in args.device or 'cpu' in args.device):
+             actual_device = torch.device(args.device)
+        elif torch.cuda.is_available():
+             actual_device = torch.device("cuda:0")
+             print(f"Fallback: Using cuda:0")
+        else:
+             actual_device = torch.device("cpu")
+             print(f"Fallback: Using cpu")
+
     if best_model_path_from_callback and os.path.exists(best_model_path_from_callback):
          print(f"Loading best model from: {best_model_path_from_callback}")
          # Use load_from_checkpoint on the class to get a fresh instance with the best weights
@@ -110,12 +126,14 @@ def train_model(args, m_config, train_dataloader, trainval_dataloader):
              lr=m_config.get("lr")
          )
          # Put model on the correct device after loading
-         best_model.to(args.device)
+         best_model.to(actual_device)
+         model.eval()
          return best_model
     else:
         print(f"Warning: No best model path found or path does not exist: '{best_model_path_from_callback}'. Returning the model state at the end of training.")
         # Fallback: return the model as it is after the last training step
-        model.eval() # Set to evaluation mode
+        model.eval() # Set to evaluation model
+        model.to(actual_device)
         return model
 
 
