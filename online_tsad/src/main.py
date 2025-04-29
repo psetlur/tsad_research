@@ -107,10 +107,10 @@ if __name__ == "__main__":
 
     model = train_model(args, m_config, train_dataloader, trainval_dataloader)
     wd, f1 = black_box_function(args, model, train_dataloader, val_dataloader, test_dataloader)
-    with open(f'logs/training/{args.trail}/wd_f1score.txt', 'w') as file:
-        file.write('wd: ' + str(wd))
-        file.write("\n")
-        file.write('f1score: ' + str(f1))
+    # with open(f'logs/training/{args.trail}/wd_f1score.txt', 'w') as file:
+    #     file.write('wd: ' + str(wd))
+    #     file.write("\n")
+    #     file.write('f1score: ' + str(f1))
     raise Exception()
 
     # --- Adaptive Kappa Schedule Parameters with Warmup ---

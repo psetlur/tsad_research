@@ -41,7 +41,7 @@ LENGTH_BINS = [0.2, 0.3, 0.4, 0.5]
 LEVEL_BINS = [-1, -0.33, 0.33, 1]
 
 NUM_POSITIVE = 1
-NUM_NEGATIVE = 1
+NUM_NEGATIVE = 10
 
 
 def hist_sample(cdf, bins):
