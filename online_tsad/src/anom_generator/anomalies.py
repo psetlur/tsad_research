@@ -319,7 +319,7 @@ class AnomParams:
                 "length_h1": 0.6,
                 "start": [i for i in np.arange(0, 0.5, 0.01)],
             },
-            "mot_mean_1_scaled": {
+            "ucr": {
                 "level_h0": 0.7,
                 "level_h1": 0.2,
                 "length_h0": 0.2,
@@ -338,7 +338,7 @@ def main():
     parser.add_argument("--anom_type", type=str)
     parser.add_argument("--truncated_length", type=int, default=-1)
     parser.add_argument("--aug_num", type=int, default=1)
-    parser.add_argument("--name", type=str, default='smd')
+    parser.add_argument("--name", type=str, default='ucr')
     parser.add_argument("--seed", type=int)
     # parser.add_argument("--fixed_level", type=float, default=None, help="Fixed level for anomalies (optional)")
     # parser.add_argument("--fixed_length", type=float, default=None, help="Fixed length for anomalies (optional)")

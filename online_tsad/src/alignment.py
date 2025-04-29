@@ -325,7 +325,7 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
                             if x_augs_dict[anomaly_type]['length'].get(length) is None:
                                 x_augs_dict[anomaly_type]['length'][length] = list()
                                 labels_dict[anomaly_type]['length'][length] = list()
-                            x_aug, label = inject_mean(x, fixed_mean_level, np.random.uniform(0, 0.5), length)
+                            x_aug, label = inject_platform(x, fixed_platform_level, np.random.uniform(0, 0.5), length)
                             x_augs_dict[anomaly_type]['length'][length].append(x_aug)
                             labels_dict[anomaly_type]['length'][length].append(label)
                     elif anomaly_type == 'mean':
@@ -516,10 +516,10 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
                         print(f'{anomaly_type}, {train_config}, {valid_config}, '
                               f'{total_loss[anomaly_type][config][train_config][valid_config]}, '
                               f'{f1score[anomaly_type][config][train_config][valid_config]}')
-                        print(f'{anomaly_type}, {train_config}, {valid_config}, '
-                              f'{total_loss[anomaly_type][config][train_config][valid_config]}')
-                # visualize_anomaly(z_train, z_valid, z_train_aug[anomaly_type][config],
-                #                   z_valid_aug[anomaly_type][config], config, args.trail, anomaly_type)
+                        # print(f'{anomaly_type}, {train_config}, {valid_config}, '
+                        #       f'{total_loss[anomaly_type][config][train_config][valid_config]}')
+                visualize_anomaly(z_train, z_valid, z_train_aug[anomaly_type][config],
+                                  z_valid_aug[anomaly_type][config], config, args.trail, anomaly_type)
 
         # X = torch.cat(
         #     [z_train_t, torch.cat(
