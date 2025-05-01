@@ -490,34 +490,34 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
                 total_loss[anomaly_type][config] = dict()
                 f1score[anomaly_type][config] = dict()
                 for train_config in z_train_aug_t[anomaly_type][config].keys():
-                    X = torch.cat([z_train_t, z_train_aug_t[anomaly_type][config][train_config]], dim=0).to(
-                        args.device)
-                    y = torch.tensor(np.concatenate([
-                        np.zeros((len(train_inlier_index), x_train_np.shape[1])),
-                        train_labels[anomaly_type][config][train_config]], axis=0)).to(args.device)
+                    # X = torch.cat([z_train_t, z_train_aug_t[anomaly_type][config][train_config]], dim=0).to(
+                    #     args.device)
+                    # y = torch.tensor(np.concatenate([
+                    #     np.zeros((len(train_inlier_index), x_train_np.shape[1])),
+                    #     train_labels[anomaly_type][config][train_config]], axis=0)).to(args.device)
                     # X = torch.cat([z_train_aug_t[anomaly_type][config][train_config]], dim=0).to(
                     #     args.device)
                     # y = torch.tensor(np.concatenate([
                     #     train_labels[anomaly_type][config][train_config]], axis=0)).to(args.device)
-                    classify_model = None
+                    # classify_model = None
                     total_loss[anomaly_type][config][train_config] = dict()
                     f1score[anomaly_type][config][train_config] = dict()
                     for valid_config in z_train_aug_t[anomaly_type][config].keys():
                         total_loss[anomaly_type][config][train_config][valid_config] = W_loss(
                             z_train_aug_t[anomaly_type][config][train_config],
                             z_valid_aug_t[anomaly_type][config][valid_config]).item()
-                        if classify_model == None:
-                            classify_model = train_classify_model(args=args, X_train=X, y_train=y)
-                        y_pred = classify(model=classify_model,
-                                          X_valid=z_valid_aug_t[anomaly_type][config][valid_config].detach())
-                        f1score[anomaly_type][config][train_config][valid_config] = f1_score(
-                            torch.tensor(np.array(valid_labels[anomaly_type][config][valid_config])).reshape(-1),
-                            y_pred.reshape(-1))
-                        print(f'{anomaly_type}, {train_config}, {valid_config}, '
-                              f'{total_loss[anomaly_type][config][train_config][valid_config]}, '
-                              f'{f1score[anomaly_type][config][train_config][valid_config]}')
+                        # if classify_model == None:
+                        #     classify_model = train_classify_model(args=args, X_train=X, y_train=y)
+                        # y_pred = classify(model=classify_model,
+                        #                   X_valid=z_valid_aug_t[anomaly_type][config][valid_config].detach())
+                        # f1score[anomaly_type][config][train_config][valid_config] = f1_score(
+                        #     torch.tensor(np.array(valid_labels[anomaly_type][config][valid_config])).reshape(-1),
+                        #     y_pred.reshape(-1))
                         # print(f'{anomaly_type}, {train_config}, {valid_config}, '
-                        #       f'{total_loss[anomaly_type][config][train_config][valid_config]}')
+                        #       f'{total_loss[anomaly_type][config][train_config][valid_config]}, '
+                        #       f'{f1score[anomaly_type][config][train_config][valid_config]}')
+                        print(f'{anomaly_type}, {train_config}, {valid_config}, '
+                              f'{total_loss[anomaly_type][config][train_config][valid_config]}')
                 visualize_anomaly(z_train, z_valid, z_train_aug[anomaly_type][config],
                                   z_valid_aug[anomaly_type][config], config, args.trail, anomaly_type)
 
