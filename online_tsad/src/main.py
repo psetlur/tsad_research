@@ -4,6 +4,7 @@ import argparse
 import pandas as pd
 import torch
 import pytorch_lightning as pl
+import torch.distributed as dist
 from bayes_opt import BayesianOptimization
 from bayes_opt.acquisition import UpperConfidenceBound
 from tqdm import tqdm
@@ -64,11 +65,16 @@ def get_average_uncertainty(optimizer, pbounds, n_samples=2000):
 
 # --- main script ---
 if __name__ == "__main__":
-    if torch.cuda.is_available():
-        print(f"There are {torch.cuda.device_count()} GPU(s) available.")
-        print("Device name:", torch.cuda.get_device_name(0))
-    else:
-        print("No GPU available, using the CPU instead.")
+    global_rank = int(os.environ.get("RANK", os.environ.get("GLOBAL_RANK", 0)))
+    world_size = int(os.environ.get("WORLD_SIZE", os.environ.get("GROUP_WORLD_SIZE", 1)))
+    is_distributed = world_size > 1
+
+    if global_rank == 0:
+        if torch.cuda.is_available():
+            print(f"There are {torch.cuda.device_count()} GPU(s) available.")
+            print("Device name:", torch.cuda.get_device_name(0))
+        else:
+            print("No GPU available, using the CPU instead.")
 
     pl.seed_everything(0)
     torch.backends.cudnn.deterministic = True
@@ -106,12 +112,36 @@ if __name__ == "__main__":
         [X_train], [X_val], [X_test, y_test], batch_size=m_config["batch_size"])
 
     model = train_model(args, m_config, train_dataloader, trainval_dataloader)
-    wd, f1 = black_box_function(args, model, train_dataloader, val_dataloader, test_dataloader)
-    with open(f'logs/training/{args.trail}/wd_f1score.txt', 'w') as file:
-        file.write('wd: ' + str(wd))
-        file.write("\n")
-        file.write('f1score: ' + str(f1))
-    raise Exception()
+
+    if is_distributed:
+        if dist.is_available() and dist.is_initialized():
+             dist.barrier()
+    
+    if global_rank == 0:
+        print(f"\n--- Running black_box_function on Rank 0 ---")
+        eval_device = next(model.parameters()).device
+        model.to(eval_device)
+        model.eval()
+        args.device = str(eval_device)
+        wd, f1 = black_box_function(args, model, train_dataloader, val_dataloader, test_dataloader)
+        print(f"Rank 0: black_box_function returned WD: {wd}, F1: {f1}")
+
+        log_dir = f'logs/training/{args.trail}'
+        os.makedirs(log_dir, exist_ok=True)
+        results_path = f'{log_dir}/wd_f1score.txt'
+        with open(results_path, 'w') as file:
+            file.write('wd: ' + str(wd))
+            file.write("\n")
+            file.write('f1score: ' + str(f1))
+        print(f"Rank 0: Results saved to {results_path}")
+
+
+    # wd, f1 = black_box_function(args, model, train_dataloader, val_dataloader, test_dataloader)
+    # with open(f'logs/training/{args.trail}/wd_f1score.txt', 'w') as file:
+    #     file.write('wd: ' + str(wd))
+    #     file.write("\n")
+    #     file.write('f1score: ' + str(f1))
+    # raise Exception()
 
     # # --- Adaptive Kappa Schedule Parameters with Warmup ---
     # number_of_random_search = 10  # Pure random sampling (part of warmup)

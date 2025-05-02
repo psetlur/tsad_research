@@ -224,6 +224,8 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
     variance_level_step = 0.05
     variance_length_step = 0.02
 
+    model_device = next(model.parameters()).device
+
     anomaly_types = ['platform', 'mean', 'spike', 'amplitude', 'trend', 'variance']
     # anomaly_types = ['platform']
     # anomaly_types = ['mean']
@@ -236,7 +238,8 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
     with torch.no_grad():
         z_train_list, x_train_list = [], []
         for x_batch in train_dataloader:
-            c_x = model(x_batch.to(args.device)).detach()
+            model_device = next(model.parameters()).device
+            c_x = model(x_batch.to(model_device)).detach()
             z_train_list.append(c_x)
             x_train_list.append(x_batch.cpu().numpy())  # Move to CPU before numpy
         z_train = torch.cat(z_train_list, dim=0)
@@ -249,7 +252,8 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
 
         z_valid_list, x_valid_list = [], []
         for x_batch in val_dataloader:
-            c_x = model(x_batch.to(args.device)).detach()
+            model_device = next(model.parameters()).device
+            c_x = model(x_batch.to(model_device)).detach()
             z_valid_list.append(c_x)
             x_valid_list.append(x_batch.cpu().numpy())
         z_valid = torch.cat(z_valid_list, dim=0)
@@ -294,7 +298,7 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
                 x_augs.append(x_aug)
 
         emb = EmbNormalizer()
-        z_aug = model(torch.tensor(np.array(x_augs)).float().unsqueeze(1).to(0)).detach()
+        z_aug = model(torch.tensor(np.array(x_augs)).float().unsqueeze(1).to(model_device)).detach()
         z_train_t, z_valid_t, _ = emb(z_train[train_inlier_index].clone().squeeze(),
                                       z_valid[valid_inlier_index].clone().squeeze(), z_aug)
 
@@ -463,13 +467,13 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
 
         z_train_aug = {
             anomaly_type: {
-                config: {c: model(torch.tensor(np.array(x_aug)).float().unsqueeze(1).to(args.device)).detach()
+                config: {c: model(torch.tensor(np.array(x_aug)).float().unsqueeze(1).to(model_device)).detach()
                          for c, x_aug in x_augs.items()}
                 for config, x_augs in x_train_aug[anomaly_type].items()}
             for anomaly_type in anomaly_types}
         z_valid_aug = {
             anomaly_type: {
-                config: {c: model(torch.tensor(np.array(x_aug)).float().unsqueeze(1).to(args.device)).detach()
+                config: {c: model(torch.tensor(np.array(x_aug)).float().unsqueeze(1).to(model_device)).detach()
                          for c, x_aug in x_augs.items()}
                 for config, x_augs in x_valid_aug[anomaly_type].items()}
             for anomaly_type in anomaly_types}
@@ -655,8 +659,8 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
                     raise Exception(f'Unsupported anomaly_type: {anomaly_type}.')
                 x_train_aug.append(x_aug)
                 train_labels.append(l)
-        z_train_aug = model(torch.tensor(np.array(x_train_aug)).float().unsqueeze(1).to(args.device)).detach()
-        z_valid_aug = model(torch.tensor(np.array(x_valid_aug)).float().unsqueeze(1).to(args.device)).detach()
+        z_train_aug = model(torch.tensor(np.array(x_train_aug)).float().unsqueeze(1).to(model_device)).detach()
+        z_valid_aug = model(torch.tensor(np.array(x_valid_aug)).float().unsqueeze(1).to(model_device)).detach()
         z_train_t, z_valid_t, _ = emb(z_train[train_inlier_index].clone().squeeze(),
                                       z_valid[valid_inlier_index].clone().squeeze(),
                                       torch.cat([z_train_aug, z_valid_aug], dim=0))
@@ -686,7 +690,7 @@ def black_box_function(args, model, train_dataloader, val_dataloader, test_datal
                         valid_labels_np.size > 0 and valid_labels_np.shape[1] == sequence_length:
                     y_clf_train_np = np.concatenate([np.zeros((len(train_inlier_index), sequence_length)),
                                                      train_labels_np], axis=0)
-                    y_clf_train = torch.tensor(y_clf_train_np, dtype=torch.float32).to(args.device)
+                    y_clf_train = torch.tensor(y_clf_train_np, dtype=torch.float32).to(model_device)
                     classify_model, ls = train_classify_model(args=args, X_train=X_clf_train, y_train=y_clf_train,
                                                               sequence_length=sequence_length)
                     y_pred = classify(model=classify_model, X_valid=z_valid_aug_t.detach())

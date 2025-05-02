@@ -120,6 +120,37 @@ class Encoder(pl.LightningModule):
 
         self.anomaly_types = ['platform', 'mean', 'spike', 'amplitude', 'trend', 'variance']
 
+    def load_state_dict(self, state_dict, strict=True):
+        """
+        Override load_state_dict to handle size mismatch for the dynamically sized 'normal_x' buffer.
+        We pop the key if sizes mismatch and then load non-strictly.
+        """
+        current_model_dict = self.state_dict()
+        normal_x_key = 'normal_x'
+
+        if normal_x_key in state_dict and normal_x_key in current_model_dict:
+            ckpt_shape = state_dict[normal_x_key].shape
+            model_shape = current_model_dict[normal_x_key].shape
+            if ckpt_shape != model_shape:
+                print(f"Detected size mismatch for '{normal_x_key}': "
+                      f"Checkpoint shape {ckpt_shape}, Model shape {model_shape}. "
+                      f"Ignoring '{normal_x_key}' from checkpoint during load.")
+                state_dict.pop(normal_x_key)
+                # Set strict to False BECAUSE we removed a key that exists in the current model
+                strict_load = False
+            else:
+                # If shapes match, adhere to the original strictness request
+                strict_load = strict
+        else:
+            # If key isn't in checkpoint or model, adhere to original strictness
+            strict_load = strict
+
+
+        # --- MINIMAL CHANGE HERE: Use calculated strict_load flag ---
+        # Call the parent class's load_state_dict
+        # Pass strict=False if we popped the key, otherwise pass the original strict value
+        return super().load_state_dict(state_dict, strict=strict_load)
+
     # --- forward and injection methods (Keep exactly as provided) ---
     def forward(self, x):
         # Input x is assumed on self.device by Lightning
